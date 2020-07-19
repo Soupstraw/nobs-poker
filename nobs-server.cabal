@@ -1,0 +1,115 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 060f4000017ba93480c9495f741b39fe38df3aa5e4bc641f9c55147c25665019
+
+name:           nobs-server
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/NoBSPoker#readme>
+homepage:       https://github.com/Soupstraw/NoBSPoker#readme
+bug-reports:    https://github.com/Soupstraw/NoBSPoker/issues
+author:         Joosep Jääger
+maintainer:     joosep.jaager@gmail.com
+copyright:      2020 Joosep Jääger
+license:        AGPL-3.0-only
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/Soupstraw/NoBSPoker
+
+library
+  exposed-modules:
+      Game
+  other-modules:
+      Paths_nobs_server
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      MonadRandom
+    , base >=4.7 && <5
+    , base64
+    , blaze-html
+    , bytestring
+    , lens
+    , mtl
+    , random-shuffle
+    , servant
+    , servant-blaze
+    , servant-server
+    , servant-websockets
+    , text
+    , uniplate
+    , vector
+    , wai
+    , warp
+    , websockets
+  default-language: Haskell2010
+
+executable nobs-server
+  main-is: Main.hs
+  other-modules:
+      Html.Index
+      Paths_nobs_server
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      MonadRandom
+    , base >=4.7 && <5
+    , base64
+    , blaze-html
+    , bytestring
+    , lens
+    , mtl
+    , nobs-server
+    , random-shuffle
+    , servant
+    , servant-blaze
+    , servant-server
+    , servant-websockets
+    , text
+    , uniplate
+    , vector
+    , wai
+    , warp
+    , websockets
+  default-language: Haskell2010
+
+test-suite nobs-server-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_nobs_server
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      MonadRandom
+    , NoBSPoker
+    , base >=4.7 && <5
+    , base64
+    , blaze-html
+    , bytestring
+    , lens
+    , mtl
+    , random-shuffle
+    , servant
+    , servant-blaze
+    , servant-server
+    , servant-websockets
+    , text
+    , uniplate
+    , vector
+    , wai
+    , warp
+    , websockets
+  default-language: Haskell2010
