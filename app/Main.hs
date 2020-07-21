@@ -20,7 +20,7 @@ import Servant.HTML.Blaze
 
 import Text.Blaze.Html5 hiding (main)
 
-type NoBSAPI = "game" :> Raw
+type NoBSAPI = Raw
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
