@@ -1,0 +1,19 @@
+{
+  "name": "nobs-client",
+  "type": "commonjs",
+  "devDependencies": {
+    "webpack-cli": "^3.3.12"
+  },
+  "dependencies": {
+    "@types/socket.io-client": "^1.4.33",
+    "eslint": "^7.5.0",
+    "socket.io-client": "^2.3.0",
+    "tslib": "^2.0.0",
+    "typescript": "^3.9.7",
+    "webpack": "^4.43.0"
+  },
+  "scripts": {
+    "build": "tsc && webpack",
+    "lint": "eslint src/**/*.ts"
+  }
+}
