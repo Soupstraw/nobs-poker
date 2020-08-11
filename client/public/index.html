@@ -1,0 +1,47 @@
+<html>
+   <head>
+      <title>VueJs Introduction</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+      <script type="text/javascript" src="js/vue.js"></script>
+      <link rel="stylesheet" type="text/css" href="index.css">
+   </head>
+   <body>
+      <div class="overlay">
+        <div class="table-view">
+          <div v-bind:style="positionSeat(n)" v-for="n in seats">
+            <img class="profile-image" src="profiles/default.png"></img>
+            <div class="name-tag">Someone</div>
+            <div class="money">$1000</div>
+          </div>
+        </div>
+        <div class="controls-view">
+          <input type="button" id="fold-button" value="Fold"></button>
+          <input type="button" id="check-button" value="Check"></button>
+          <div class="raise-combo">
+            <input type="button" id="raise-button" value="Raise"></button>
+            <input type="text"  id="raise-text" value="1"/>
+            <input type="button" id="raise-minus" value="-BB"></button>
+            <input type="button" id="raise-plus" value="+BB"></button>
+          </div>
+        </div>
+      </div>
+      <script type="text/javascript">
+         var vue = new Vue({
+            el: '.overlay',
+            data: {
+            },
+            props: ['seats'],
+            methods: {
+              positionSeat: function(n) {
+                return {
+                  "position": "absolute",
+                  "width": "15%",
+                  "left": (1 + Math.sin(n / this.seats * 6.28)) * 42.5 + "%",
+                  "top": 5 + (1 + Math.cos(n / this.seats * 6.28)) * 35 + "%"
+                }
+              }
+            }
+         });
+      </script>
+   </body>
+</html>

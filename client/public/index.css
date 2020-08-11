@@ -1,0 +1,100 @@
+
+div{
+  border-style: solid;
+  border-width: 1px;
+  border-color: #9f9f9f;
+  border-radius: 5px;
+  box-sizing: border-box;
+}
+
+.overlay{
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  background: #dedad5;
+}
+
+.table-view, .controls-view{
+  width: 100%;
+  height: 70%;
+  background: #e1e1e1;
+  margin: auto;
+  position: relative;
+}
+
+.controls-view{
+  margin-top: 5px;
+  height: 20%;
+  padding: 5px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  grid-gap: 5px;
+}
+
+input[type="button"]{
+  float: left;
+  font-size: 1.5em;
+}
+
+#raise-text{
+  float: left;
+  height: 25%;
+  width: 100%;
+}
+
+.raise-combo{
+  vertical-align: middle;
+  float: left;
+  border: none;
+}
+
+#raise-button{
+  height: 50%;
+  width: 100%;
+}
+
+#raise-plus, #raise-minus{
+  width: 50%;
+  height: 25%;
+}
+
+.seat{
+  position: absolute;
+  width: 3vw;
+  border: none;
+}
+
+.profile-image{
+  width: 100%;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #9f9f9f;
+  border-radius: 5px;
+}
+
+.name-tag, .money{
+  border: none;
+  width: 100%;
+  text-align: center;
+  vertical-align: middle;
+}
+
+@media only screen and (min-width: 1024px) {
+  .table-view{
+    margin-top: 10px;
+    width: 33.333%;
+  }
+
+  .controls-view{
+    height: 20%;
+    width: 33.333%;
+  }
+
+  .seat{
+    width: 5vw;
+    height: 7.5vw;
+  }
+}
