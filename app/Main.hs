@@ -15,7 +15,7 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-type NoBSAPI = Raw
+type NoBSAPI = "game"   :> Raw
           :<|> "socket" :> WebSocket
 
 nobsAPI :: Proxy NoBSAPI
