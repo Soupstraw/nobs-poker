@@ -6,8 +6,6 @@ module Main where
 
 import Control.Monad.IO.Class
 
-import Data.Text
-
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.WebSockets
@@ -15,8 +13,8 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-type NoBSAPI = "game"   :> Raw
-          :<|> "socket" :> WebSocket
+type NoBSAPI = "socket" :> WebSocket
+          :<|> Raw
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
@@ -32,8 +30,8 @@ serveRoom conn =
     return ()
 
 nobsServer :: Server NoBSAPI
-nobsServer = serveIndex
-        :<|> serveRoom
+nobsServer = serveRoom
+        :<|> serveIndex
 
 app :: Application
 app = serve nobsAPI nobsServer
