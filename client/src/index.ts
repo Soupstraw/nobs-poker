@@ -1,5 +1,5 @@
 
-var socket = new WebSocket("wss://localhost:8080/socket");
+var socket = new WebSocket("ws://localhost:8080/socket");
 
 socket.onopen = function(_) {
   alert("Connection opened");

@@ -22,7 +22,7 @@ nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
 
 serveIndex :: Server Raw
-serveIndex = serveDirectoryFileServer "client/dist"
+serveIndex = serveDirectoryFileServer "client/public"
 
 serveRoom :: MonadIO m => Connection -> m ()
 serveRoom conn =

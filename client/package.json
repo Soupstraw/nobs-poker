@@ -13,7 +13,7 @@
     "webpack": "^4.43.0"
   },
   "scripts": {
-    "build": "tsc && webpack",
+    "build": "./build.sh",
     "lint": "eslint src/**/*.ts"
   }
 }
