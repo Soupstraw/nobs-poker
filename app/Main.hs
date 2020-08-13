@@ -6,6 +6,7 @@
 module Main where
 
 import Control.Concurrent
+import Control.Lens
 import Control.Monad.IO.Class
 
 import Data.Map
@@ -17,6 +18,8 @@ import Network.WebSockets
 
 import Servant
 import Servant.API.WebSocket
+
+import CommandParser
 
 type NoBSAPI = "socket" :> WebSocket
           :<|> Raw
@@ -38,19 +41,6 @@ data ServerState = ServerState
   , _ssRoomPool :: Map RoomID Room
   }
 
-
-instance WebSocketsData UserMessage where
-  fromDataMessage (Text _ (Just msg)) = 
-    case head ws of
-      "/help"    -> undefined
-      "/setname" -> undefined
-      "/join"    -> undefined
-      _          -> UserMessage $ Say msg
-    where
-      ws = T.words msg
-  fromLazyByteString = undefined
-  toLazyByteString = undefined
-
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
 
@@ -61,11 +51,10 @@ serveSocket
   :: MonadIO m 
   => Connection 
   -> m ()
-serveSocket conn =
+serveSocket conn = liftIO $
   do
-    liftIO $ do
-      putStrLn "New connection!"
-      forkIO $ serveClient conn
+    putStrLn "New connection!"
+    forkIO $ serveClient conn
     return ()
 
 serveClient 
@@ -75,6 +64,13 @@ serveClient
 serveClient conn =
   do
     msg <- liftIO $ receiveData conn
+    let act = msg ^. umAction
+    let notImplementedMsg :: T.Text
+        notImplementedMsg = "Command not implemented"
+    liftIO $ case act of
+      Say x        -> sendTextData conn x
+      ParseError x -> sendTextData conn x
+      _            -> sendTextData conn notImplementedMsg
     serveClient conn
 
 nobsServer :: Server NoBSAPI
@@ -87,6 +83,6 @@ app = serve nobsAPI nobsServer
 main :: IO ()
 main = 
   do
-    putStrLn $ "Server started at port 8080"
+    putStrLn "Server started at port 8080"
     run 8080 app
 

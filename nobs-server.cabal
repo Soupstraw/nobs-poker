@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 70dd177bda91ab0876ab50d295ca1d8dbf929daa4455ed39519e7e9ce3b2981c
+-- hash: 28f55334f0bd48f91ea9828846899e93bf535250cfefe131bfeacaa288e5f560
 
 name:           nobs-server
 version:        0.1.0.0
@@ -60,7 +60,6 @@ executable nobs-server
   main-is: Main.hs
   other-modules:
       CommandParser
-      Html.Index
       Paths_nobs_server
   hs-source-dirs:
       app
