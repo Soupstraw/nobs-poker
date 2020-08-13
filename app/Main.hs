@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -8,7 +9,7 @@ import Control.Concurrent
 import Control.Monad.IO.Class
 
 import Data.Map
-import Data.Text
+import qualified Data.Text.Lazy as T
 
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -24,7 +25,7 @@ type UserID = Int
 type RoomID = Int
 
 data User = User
-  { _userName :: Text
+  { _userName :: T.Text
   , _userConn :: Connection
   }
 
@@ -39,13 +40,24 @@ data ServerState = ServerState
 
 data UserMessage = UserMessage
   { _umAction :: UserAction
-  , _umRoom   :: RoomID
   }
 
 data UserAction 
-  = SetName Text
+  = SetName T.Text
   | JoinRoom RoomID
-  | Say Text
+  | Say T.Text
+
+instance WebSocketsData UserMessage where
+  fromDataMessage (Text _ (Just msg)) = 
+    case head ws of
+      "/help"    -> undefined
+      "/setname" -> undefined
+      "/join"    -> undefined
+      _          -> UserMessage $ Say msg
+    where
+      ws = T.words msg
+  fromLazyByteString = undefined
+  toLazyByteString = undefined
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy

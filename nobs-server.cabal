@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 312531a310c95ee6297cf6e5aa523b1b7a8ecef39b7bb6c8837f1aca81281467
+-- hash: 70dd177bda91ab0876ab50d295ca1d8dbf929daa4455ed39519e7e9ce3b2981c
 
 name:           nobs-server
 version:        0.1.0.0
@@ -41,6 +41,7 @@ library
     , bytestring
     , containers
     , lens
+    , megaparsec
     , mtl
     , random-shuffle
     , servant
@@ -58,6 +59,7 @@ library
 executable nobs-server
   main-is: Main.hs
   other-modules:
+      CommandParser
       Html.Index
       Paths_nobs_server
   hs-source-dirs:
@@ -71,6 +73,7 @@ executable nobs-server
     , bytestring
     , containers
     , lens
+    , megaparsec
     , mtl
     , nobs-server
     , random-shuffle
@@ -103,6 +106,7 @@ test-suite nobs-server-test
     , bytestring
     , containers
     , lens
+    , megaparsec
     , mtl
     , random-shuffle
     , servant

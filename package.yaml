@@ -32,6 +32,7 @@ dependencies:
 - wai
 - warp
 - websockets
+- megaparsec
 - servant
 - servant-blaze
 - servant-server
