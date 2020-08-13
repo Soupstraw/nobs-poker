@@ -38,14 +38,6 @@ data ServerState = ServerState
   , _ssRoomPool :: Map RoomID Room
   }
 
-data UserMessage = UserMessage
-  { _umAction :: UserAction
-  }
-
-data UserAction 
-  = SetName T.Text
-  | JoinRoom RoomID
-  | Say T.Text
 
 instance WebSocketsData UserMessage where
   fromDataMessage (Text _ (Just msg)) = 
