@@ -1,55 +1,83 @@
 port module Main exposing (..)
 
-import Browser
+import Browser exposing (..)
 import List as L
 import Element exposing (..)
 import Element.Input as I
 import Element.Border as B
 import Element.Font as F
 import String as S
+import Url exposing (Url)
+
 
 port sendMessage : String -> Cmd msg
 port messageReceiver : (String -> msg) -> Sub msg
 
 seatCount = 10
 
-main = Element.layout [] view
+main : Program () Model Msg
+main = application
+  { init = init
+  , view = document
+  , update = update
+  , subscriptions = subscriptions
+  , onUrlChange = UrlChange
+  , onUrlRequest = UrlReq
+  }
 
 type alias Model = 
   { raiseAmt : Int
   , minRaise : Int
+  , messages : List String
+  , draft    : String
   }
 
 type Msg 
   = Fold 
   | Call 
-  | Raise Int
-  | Recv String
+  | Raise
   | Send String
+  | Recv String
+  | Draft String
   | SetBet String
+  | UrlChange Url
+  | UrlReq UrlRequest
 
-init =
-  { raiseAmt = 0
+init _ _ _ =
+  ({ raiseAmt = 0
   , minRaise = 10
+  , messages = []
+  , draft = ""
+  }, Cmd.none)
+
+document : Model -> Document Msg
+document model = 
+  { title = "Udupoker"
+  , body = [Element.layout [] (view model)]
   }
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    Fold     -> model
-    Call     -> model
-    Raise _  -> model
-    Recv x   -> model
-    Send x   -> model
+    Draft x  -> 
+      ( {model | draft = x}
+      , Cmd.none
+      )
+    Recv x   -> ({ model | messages = model.messages ++ [x]}, Cmd.none)
+    Send x   -> ({ model | draft = ""}, sendMessage x)
     SetBet x -> case String.toInt x of
-      Just amt -> { model |  raiseAmt = amt }
-      Nothing  -> model
+      Just amt -> ({ model |  raiseAmt = amt }, Cmd.none)
+      Nothing  -> if x == "" 
+                    then ({model | raiseAmt = 0}, Cmd.none)
+                    else (model, Cmd.none)
+    _ -> (model, Cmd.none)
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
   messageReceiver Recv
 
-view = row 
+view : Model -> Element Msg
+view model = row 
   [ width fill
   , height fill
   ]
@@ -57,13 +85,13 @@ view = row
       [ width <| fillPortion 3
       , height fill
       ]
-      [ gameView
-      , inputRow
+      [ gameView model
+      , inputRow model
       ]
-  , chatView
+  , chatView model
   ]
 
-gameView = el 
+gameView model = el 
   ( [ height <| fillPortion 3
     , width fill
     ] ++ seats
@@ -75,7 +103,7 @@ gameView = el
     [ text "$0"
     ]
 
-chatView = column
+chatView model = column
   [ width fill 
   , height fill
   , B.width 1
@@ -85,16 +113,23 @@ chatView = column
       , height fill
       , padding 10
       ] 
-      [ text "Player: Hello world!"
-      , text "World: Hello to you too!"
+      (msgElems model)
+  , row [alignBottom]
+      [ I.text [] 
+          { label = I.labelHidden "Send a message.."
+          , onChange = Draft
+          , placeholder = Just (I.placeholder [] <| text "Send a message..")
+          , text = model.draft
+          }
+      , I.button [alignRight]
+          { label = text "Send"
+          , onPress = Just <| Send model.draft
+          }
       ]
-  , I.text [alignBottom] 
-      { label = I.labelHidden "Send a message.."
-      , onChange = Send
-      , placeholder = Just (I.placeholder [] <| text "Send a message..")
-      , text = ""
-      }
   ]
+
+msgElems : Model -> List (Element Msg)
+msgElems model = L.map text model.messages
 
 seats = 
   let
@@ -102,7 +137,8 @@ seats =
       in inFront <| tablePlayer (500 * (sin ang)) (250 * (cos ang))
   in L.map (f << toFloat) <| L.range 1 seatCount
 
-inputRow = row 
+inputRow : Model -> Element Msg
+inputRow model = row 
   [ padding 10
   , B.width 1
   , B.solid
@@ -123,11 +159,13 @@ inputRow = row
       [ I.text [alignTop] 
           { label = I.labelHidden "Raise amount"
           , onChange = SetBet
-          , placeholder = Nothing
-          , text = ""
+          , placeholder = Just (I.placeholder [] <| text <| S.fromInt model.minRaise)
+          , text = if model.raiseAmt == 0
+                     then ""
+                     else S.fromInt model.raiseAmt
           }
       , I.button buttonStyle
-          { onPress = Nothing
+          { onPress = Just Raise
           , label = text "Raise"
           }
       ]
