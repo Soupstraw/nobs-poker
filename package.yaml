@@ -21,25 +21,28 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- base64
+- blaze-html
+- bytestring
+- concurrency
 - containers
-- text
-- uniplate
 - lens
-- random-shuffle
-- mtl
-- vector
-- MonadRandom
-- wai
-- warp
-- websockets
 - megaparsec
+- unliftio
+- MonadRandom
+- mtl
+- random-shuffle
+- relude
 - servant
 - servant-blaze
 - servant-server
 - servant-websockets
-- blaze-html
-- bytestring
-- base64
+- text
+- uniplate
+- vector
+- wai
+- warp
+- websockets
 
 library:
   source-dirs: src
@@ -55,6 +58,45 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    default-extensions:
+    - BangPatterns
+    - BinaryLiterals
+    - ConstraintKinds
+    - DataKinds
+    - DefaultSignatures
+    - DeriveDataTypeable
+    - DeriveFoldable
+    - DeriveFunctor
+    - DeriveGeneric
+    - DeriveTraversable
+    - DoAndIfThenElse
+    - EmptyDataDecls
+    - ExistentialQuantification
+    - FlexibleContexts
+    - FlexibleInstances
+    - FunctionalDependencies
+    - GADTs
+    - GeneralizedNewtypeDeriving
+    - InstanceSigs
+    - KindSignatures
+    - LambdaCase
+    - MultiParamTypeClasses
+    - MultiWayIf
+    - NamedFieldPuns
+    - NoImplicitPrelude
+    - OverloadedStrings
+    - PartialTypeSignatures
+    - PatternGuards
+    - PolyKinds
+    - RankNTypes
+    - RecordWildCards
+    - ScopedTypeVariables
+    - StandaloneDeriving
+    - TupleSections
+    - TypeFamilies
+    - TypeSynonymInstances
+    - ViewPatterns   
+    - NoImplicitPrelude
     dependencies:
     - nobs-server
 

@@ -63,8 +63,26 @@ update msg model =
       ( {model | draft = x}
       , Cmd.none
       )
-    Recv x   -> ({ model | messages = model.messages ++ [x]}, Cmd.none)
-    Send x   -> ({ model | draft = ""}, sendMessage x)
+    Raise    -> 
+      ( { model | raiseAmt = 0}
+      , sendMessage <| "/raise " ++ String.fromInt model.raiseAmt
+      )
+    Call     ->
+      ( model
+      , sendMessage "/call"
+      )
+    Fold     ->
+      ( model
+      , sendMessage "/fold"
+      )
+    Recv x   -> 
+      ( { model | messages = model.messages ++ [x]}
+      , Cmd.none
+      )
+    Send x   -> 
+      ( { model | draft = ""}
+      , sendMessage x
+      )
     SetBet x -> case String.toInt x of
       Just amt -> ({ model |  raiseAmt = amt }, Cmd.none)
       Nothing  -> if x == "" 
@@ -148,11 +166,11 @@ inputRow model = row
   , alignBottom
   ]
   [ I.button buttonStyle
-      { onPress = Nothing
+      { onPress = Just Fold
       , label = text "Fold"
       }
   , I.button buttonStyle
-      { onPress = Nothing
+      { onPress = Just Call
       , label = text "Call"
       }
   , column [width fill, height fill]

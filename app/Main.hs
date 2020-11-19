@@ -1,16 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
-module Main where
+module Main (main) where
 
-import Control.Concurrent
+import Relude
+import Relude.Extra.Map
+
+import Control.Monad.Random
 import Control.Lens
-import Control.Monad.IO.Class
-
-import Data.Map
-import qualified Data.Text.Lazy as T
 
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -19,70 +16,137 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-import CommandParser
-
-type NoBSAPI = "socket" :> WebSocket
-          :<|> Raw
-
 type UserID = Int
 type RoomID = Int
 
 data User = User
-  { _userName :: T.Text
-  , _userConn :: Connection
+  { _userName :: MVar Text
+  , _userConn :: MVar Connection
   }
+makeLenses 'User
 
 data Room = Room
-  { _roomUsers :: [UserID]
+  { _roomUsers :: MVar [UserID]
   }
 
 data ServerState = ServerState
   { _ssUserPool :: Map UserID User
   , _ssRoomPool :: Map RoomID Room
   }
+makeLenses 'ServerState
+
+type NoBSAPI = "socket" :> WebSocket
+          :<|> Raw
+type NoBSM = ReaderT (IORef ServerState) (RandT StdGen Handler)
+
+emptyState :: ServerState
+emptyState = ServerState mempty mempty
+
+runNoBSM :: NoBSM a -> IORef ServerState -> Handler a
+runNoBSM m s = evalRandT (runReaderT m s) (mkStdGen 0)
+
+runNoBSM_ :: NoBSM a -> IORef ServerState -> IO a
+runNoBSM_ m st = 
+  do
+    res <- runHandler $ evalRandT (runReaderT m st) (mkStdGen 0)
+    case res of
+      Right x -> return x
+      Left x  -> error $ "Server error: " <> show x
+
+addUser 
+  :: ( MonadRandom m
+     , MonadReader (IORef ServerState) m
+     , MonadIO m
+     )
+  => Connection 
+  -> m UserID
+addUser conn = 
+  do
+    ior <- ask
+    st <- liftIO $ readIORef ior
+    let userPool = st ^. ssUserPool
+    uid <- getRandom
+    if member uid userPool
+      then addUser conn
+      else do
+        let pname = "Player#" <> show uid
+        mvarConn <- newMVar conn
+        mvarName <- newMVar pname
+        let newUser = User mvarName mvarConn
+        modifyIORef ior $ ssUserPool %~ insert uid newUser
+        putTextLn $ "Added player " <> pname
+        return uid
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
 
-serveIndex :: Server Raw
-serveIndex = serveDirectoryFileServer "client/public"
+serveIndex :: ServerT Raw m
+serveIndex = serveDirectoryFileServer "client"
 
 serveSocket 
-  :: MonadIO m 
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     , MonadRandom m
+     )
   => Connection 
   -> m ()
-serveSocket conn = liftIO $
+serveSocket conn =
   do
     putStrLn "New connection!"
-    forkIO $ serveClient conn
-    return ()
+    liftIO $ sendTextData conn ("Welcome!" :: Text)
+    uid <- addUser conn
+    serveClient uid
 
 serveClient 
-  :: MonadIO m 
-  => Connection 
+  :: ( MonadIO m
+     , MonadRandom m
+     , MonadReader (IORef ServerState) m
+     )
+  => UserID 
   -> m ()
-serveClient conn =
+serveClient uid =
   do
-    msg <- liftIO $ receiveData conn
-    let act = msg ^. umAction
-    let notImplementedMsg :: T.Text
-        notImplementedMsg = "Command not implemented"
-    liftIO $ case act of
-      Say x        -> sendTextData conn x
-      ParseError x -> sendTextData conn x
-      _            -> sendTextData conn notImplementedMsg
-    serveClient conn
+    ior <- ask
+    st <- liftIO $ readIORef ior
+    let mconn = st ^? ssUserPool . at uid . _Just . userConn
+    case mconn of
+      Just x -> do
+        conn <- takeMVar x
+        msg <- liftIO $ receiveData conn
+        putMVar x conn
+        liftIO . handleMsg uid $ toString (msg :: Text)
+        serveClient uid
+      Nothing -> putStrLn $ "Failed to get connection by uid " <> show uid
 
-nobsServer :: Server NoBSAPI
+handleMsg 
+  :: MonadIO m
+  => UserID
+  -> String 
+  -> m ()
+handleMsg uid "/call" = putStrLn $ show uid <> ": Call"
+handleMsg uid "/fold" = putStrLn $ show uid <> ": Fold"
+handleMsg uid msg
+  | "/raise " `isPrefixOf` msg = putStrLn $ show uid <> ": Raise " <> drop 7 msg
+  | "/" `isPrefixOf` msg = putStrLn $ "Unknown command: " <> msg
+  | null msg = putStrLn "Empty message"
+  | otherwise = putStrLn $ "Say " <> msg
+
+nobsServer 
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     , MonadRandom m
+     )
+  => ServerT NoBSAPI m
 nobsServer = serveSocket
         :<|> serveIndex
 
-app :: Application
-app = serve nobsAPI nobsServer
+app :: IORef ServerState -> Application
+app s = serve nobsAPI $ hoistServer nobsAPI (flip runNoBSM s) nobsServer
 
 main :: IO ()
 main = 
   do
-    putStrLn "Server started at port 8080"
-    run 8080 app
+    putStrLn "Starting server at port 8080"
+    ref <- newIORef emptyState
+    run 8080 (app ref)
 

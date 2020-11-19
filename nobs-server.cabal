@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 28f55334f0bd48f91ea9828846899e93bf535250cfefe131bfeacaa288e5f560
+-- hash: 8fef49981b9c8415be0cb1451480a8808143ff6a27192c6311d75be5fc4dd2cb
 
 name:           nobs-server
 version:        0.1.0.0
@@ -39,17 +39,20 @@ library
     , base64
     , blaze-html
     , bytestring
+    , concurrency
     , containers
     , lens
     , megaparsec
     , mtl
     , random-shuffle
+    , relude
     , servant
     , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
+    , unliftio
     , vector
     , wai
     , warp
@@ -59,10 +62,10 @@ library
 executable nobs-server
   main-is: Main.hs
   other-modules:
-      CommandParser
       Paths_nobs_server
   hs-source-dirs:
       app
+  default-extensions: BangPatterns BinaryLiterals ConstraintKinds DataKinds DefaultSignatures DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DoAndIfThenElse EmptyDataDecls ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings PartialTypeSignatures PatternGuards PolyKinds RankNTypes RecordWildCards ScopedTypeVariables StandaloneDeriving TupleSections TypeFamilies TypeSynonymInstances ViewPatterns NoImplicitPrelude
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
@@ -70,18 +73,21 @@ executable nobs-server
     , base64
     , blaze-html
     , bytestring
+    , concurrency
     , containers
     , lens
     , megaparsec
     , mtl
     , nobs-server
     , random-shuffle
+    , relude
     , servant
     , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
+    , unliftio
     , vector
     , wai
     , warp
@@ -103,17 +109,20 @@ test-suite nobs-server-test
     , base64
     , blaze-html
     , bytestring
+    , concurrency
     , containers
     , lens
     , megaparsec
     , mtl
     , random-shuffle
+    , relude
     , servant
     , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
+    , unliftio
     , vector
     , wai
     , warp
