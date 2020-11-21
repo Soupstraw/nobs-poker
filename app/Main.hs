@@ -7,7 +7,7 @@ import Relude
 import Relude.Extra.Map
 
 import Control.Monad.Random
-import Control.Lens
+import Control.Lens hiding (Fold)
 
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -16,8 +16,10 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-type UserID = Int
-type RoomID = Int
+import CommandParser
+
+type UserID = Word
+type RoomID = Word
 
 data User = User
   { _userName :: MVar Text
@@ -36,6 +38,7 @@ data ServerState = ServerState
 makeLenses 'ServerState
 
 type NoBSAPI = "socket" :> WebSocket
+          :<|> "room" :> Capture "roomId" Text :> Raw
           :<|> Raw
 type NoBSM = ReaderT (IORef ServerState) (RandT StdGen Handler)
 
@@ -114,22 +117,28 @@ serveClient uid =
         conn <- takeMVar x
         msg <- liftIO $ receiveData conn
         putMVar x conn
-        liftIO . handleMsg uid $ toString (msg :: Text)
+        liftIO $ handleMsg uid msg
         serveClient uid
       Nothing -> putStrLn $ "Failed to get connection by uid " <> show uid
 
 handleMsg 
   :: MonadIO m
   => UserID
-  -> String 
+  -> Text
   -> m ()
-handleMsg uid "/call" = putStrLn $ show uid <> ": Call"
-handleMsg uid "/fold" = putStrLn $ show uid <> ": Fold"
-handleMsg uid msg
-  | "/raise " `isPrefixOf` msg = putStrLn $ show uid <> ": Raise " <> drop 7 msg
-  | "/" `isPrefixOf` msg = putStrLn $ "Unknown command: " <> msg
-  | null msg = putStrLn "Empty message"
-  | otherwise = putStrLn $ "Say " <> msg
+handleMsg userId msg = 
+  do
+    putTextLn $ "Parsing message from " <> show userId
+    putTextLn $ show msg
+    let (roomId, command) = parseMessage msg
+    putTextLn $ "Message sent to room " <> show roomId
+    case command of
+      Join x  -> putTextLn $ "join "  <> show x
+      Say x   -> putTextLn $ show x
+      Raise x -> putTextLn $ "raise " <> show x
+      Call    -> putTextLn "call"
+      Fold    -> putTextLn "fold"
+      Error x -> putTextLn $ "command parse error: " <> x
 
 nobsServer 
   :: ( MonadIO m
@@ -138,10 +147,11 @@ nobsServer
      )
   => ServerT NoBSAPI m
 nobsServer = serveSocket
+        :<|> const serveIndex
         :<|> serveIndex
 
 app :: IORef ServerState -> Application
-app s = serve nobsAPI $ hoistServer nobsAPI (flip runNoBSM s) nobsServer
+app s = serve nobsAPI $ hoistServer nobsAPI (`runNoBSM` s) nobsServer
 
 main :: IO ()
 main = 

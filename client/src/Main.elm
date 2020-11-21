@@ -8,11 +8,15 @@ import Element.Border as B
 import Element.Font as F
 import String as S
 import Url exposing (Url)
+import Url.Parser as U
+import Url.Parser exposing ((</>))
 
 
-port sendMessage : String -> Cmd msg
-port messageReceiver : (String -> msg) -> Sub msg
+port port_sendMessage : String -> Cmd msg
+port port_onConnect : (String -> msg) -> Sub msg
+port port_messageReceiver : (String -> msg) -> Sub msg
 
+seatCount : number
 seatCount = 10
 
 main : Program () Model Msg
@@ -25,12 +29,17 @@ main = application
   , onUrlRequest = UrlReq
   }
 
-type alias Model = 
-  { raiseAmt : Int
-  , minRaise : Int
-  , messages : List String
-  , draft    : String
+type alias GameRec = 
+  { raiseAmt    : Int
+  , minRaise    : Int
+  , messages    : List String
+  , draft       : String
+  , roomId      : Int
+  , playerNames : List String
   }
+
+type Model 
+  = GameModel GameRec
 
 type Msg 
   = Fold 
@@ -42,13 +51,19 @@ type Msg
   | SetBet String
   | UrlChange Url
   | UrlReq UrlRequest
+  | Connected String
 
+init : a -> b -> c -> (Model, Cmd msg)
 init _ _ _ =
-  ({ raiseAmt = 0
-  , minRaise = 10
-  , messages = []
-  , draft = ""
-  }, Cmd.none)
+  ( GameModel 
+      { raiseAmt = 0
+      , minRaise = 10
+      , messages = []
+      , draft = ""
+      , roomId = 0
+      , playerNames = []
+      }
+  , Cmd.none)
 
 document : Model -> Document Msg
 document model = 
@@ -57,45 +72,70 @@ document model =
   }
 
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
+update msg (GameModel model) =
   case msg of
     Draft x  -> 
-      ( {model | draft = x}
+      ( GameModel { model | draft = x }
       , Cmd.none
       )
     Raise    -> 
-      ( { model | raiseAmt = 0}
-      , sendMessage <| "/raise " ++ String.fromInt model.raiseAmt
+      ( GameModel { model | raiseAmt = 0}
+      , sendMessage model <| "/raise " ++ String.fromInt model.raiseAmt
       )
     Call     ->
-      ( model
-      , sendMessage "/call"
+      ( GameModel model
+      , sendMessage model "/call"
       )
     Fold     ->
-      ( model
-      , sendMessage "/fold"
+      ( GameModel model
+      , sendMessage model "/fold"
       )
     Recv x   -> 
-      ( { model | messages = model.messages ++ [x]}
+      ( GameModel <| addMessage model x
       , Cmd.none
       )
     Send x   -> 
-      ( { model | draft = ""}
-      , sendMessage x
+      ( GameModel { model | draft = ""}
+      , sendMessage model x
       )
     SetBet x -> case String.toInt x of
-      Just amt -> ({ model |  raiseAmt = amt }, Cmd.none)
+      Just amt -> 
+        ( GameModel { model |  raiseAmt = amt }
+        , Cmd.none
+        )
       Nothing  -> if x == "" 
-                    then ({model | raiseAmt = 0}, Cmd.none)
-                    else (model, Cmd.none)
-    _ -> (model, Cmd.none)
+                    then 
+                      ( GameModel {model | raiseAmt = 0}
+                      , Cmd.none
+                      )
+                    else 
+                      ( GameModel model
+                      , Cmd.none
+                      )
+    Connected x -> case Url.fromString x of
+      Just url -> 
+        case U.parse (U.s "room" </> U.string) url of
+          Just roomId -> 
+            ( GameModel model
+            , sendMessage model <| "/join " ++ roomId
+            )
+          Nothing     -> 
+            ( GameModel 
+                <| addMessage model 
+                <| "Could not get room ID from the url: " ++ x
+            , Cmd.none
+            )
+      Nothing  -> (GameModel model, Cmd.none)
+    _ -> (GameModel model, Cmd.none)
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-  messageReceiver Recv
+subscriptions model = Sub.batch
+  [ port_messageReceiver Recv
+  , port_onConnect Connected
+  ]
 
 view : Model -> Element Msg
-view model = row 
+view (GameModel model) = row 
   [ width fill
   , height fill
   ]
@@ -109,10 +149,11 @@ view model = row
   , chatView model
   ]
 
+gameView : GameRec -> Element msg
 gameView model = el 
   ( [ height <| fillPortion 3
     , width fill
-    ] ++ seats
+    ] ++ seats model
   ) <|
   column 
     [ centerX
@@ -121,15 +162,24 @@ gameView model = el
     [ text "$0"
     ]
 
+chatView : GameRec -> Element Msg
 chatView model = column
   [ width fill 
   , height fill
   , B.width 1
   ]
-  [ column 
+  [ column
       [ width fill
       , height fill
       , padding 10
+      , B.width 1
+      ]
+      (List.map text model.playerNames)
+  , column 
+      [ width fill
+      , height fill
+      , padding 10
+      , B.width 1
       ] 
       (msgElems model)
   , row [alignBottom]
@@ -146,16 +196,17 @@ chatView model = column
       ]
   ]
 
-msgElems : Model -> List (Element Msg)
+msgElems : GameRec -> List (Element Msg)
 msgElems model = L.map text model.messages
 
-seats = 
+seats : GameRec -> List (Attribute msg)
+seats model = 
   let
     f i = let ang = 2*pi*i/seatCount
-      in inFront <| tablePlayer (500 * (sin ang)) (250 * (cos ang))
+      in inFront <| tablePlayer (500 * (sin ang)) (250 * (cos ang)) model
   in L.map (f << toFloat) <| L.range 1 seatCount
 
-inputRow : Model -> Element Msg
+inputRow : GameRec -> Element Msg
 inputRow model = row 
   [ padding 10
   , B.width 1
@@ -189,20 +240,31 @@ inputRow model = row
       ]
   ]
 
+buttonStyle : List (Attribute msg)
 buttonStyle =
   [ width fill
   , height fill
   , F.center
   ]
 
-tablePlayer offset_x offset_y = column
+tablePlayer : Float -> Float -> GameRec -> Element msg
+tablePlayer offset_x offset_y model = column
   (playerStyle ++ [moveRight offset_x, moveDown offset_y])
   [ text "Player"
   , text "$1337"
   ]
 
+playerStyle : List (Attribute msg)
 playerStyle =
   [ centerX
   , centerY
   ]
+
+sendMessage : GameRec -> String -> Cmd Msg
+sendMessage model msg =
+  port_sendMessage <| (String.fromInt model.roomId) ++ " " ++ msg
+
+addMessage : GameRec -> String -> GameRec
+addMessage model msg = 
+  { model | messages = model.messages ++ [msg] }
 

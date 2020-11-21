@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Udupoker</title>
-  <script type="text/javascript" src="elm.js"></script>
+  <script type="text/javascript" src="/elm.js"></script>
 </head>
 
 <body>
@@ -23,15 +23,19 @@ var socket = new WebSocket('ws://localhost:8080/socket');
 
 // When a command goes to the `sendMessage` port, we pass the message
 // along to the WebSocket.
-app.ports.sendMessage.subscribe(function(message) {
-    socket.send(message);
+app.ports.port_sendMessage.subscribe(function(message) {
+  socket.send(message);
 });
 
 // When a message comes into our WebSocket, we pass the message along
 // to the `messageReceiver` port.
 socket.addEventListener("message", function(event) {
-	app.ports.messageReceiver.send(event.data);
+	app.ports.port_messageReceiver.send(event.data);
 });
+
+socket.onopen = function() {
+    app.ports.port_onConnect.send(window.location.href);
+};
 </script>
 
 </html>

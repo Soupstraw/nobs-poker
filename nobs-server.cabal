@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8fef49981b9c8415be0cb1451480a8808143ff6a27192c6311d75be5fc4dd2cb
+-- hash: 7b6a771e7e509c6235a7e1670419805a51dd4752bd56352b460edd0ce6f1d73c
 
 name:           nobs-server
 version:        0.1.0.0
@@ -32,9 +32,11 @@ library
       Paths_nobs_server
   hs-source-dirs:
       src
+  default-extensions: BangPatterns BinaryLiterals ConstraintKinds DataKinds DefaultSignatures DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DoAndIfThenElse EmptyDataDecls ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings PartialTypeSignatures PatternGuards PolyKinds RankNTypes RecordWildCards ScopedTypeVariables StandaloneDeriving TupleSections TypeFamilies TypeSynonymInstances ViewPatterns NoImplicitPrelude
   ghc-options: -Wall
   build-depends:
       MonadRandom
+    , attoparsec
     , base >=4.7 && <5
     , base64
     , blaze-html
@@ -42,7 +44,6 @@ library
     , concurrency
     , containers
     , lens
-    , megaparsec
     , mtl
     , random-shuffle
     , relude
@@ -57,11 +58,13 @@ library
     , wai
     , warp
     , websockets
+    , word8
   default-language: Haskell2010
 
 executable nobs-server
   main-is: Main.hs
   other-modules:
+      CommandParser
       Paths_nobs_server
   hs-source-dirs:
       app
@@ -69,6 +72,7 @@ executable nobs-server
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
+    , attoparsec
     , base >=4.7 && <5
     , base64
     , blaze-html
@@ -76,7 +80,6 @@ executable nobs-server
     , concurrency
     , containers
     , lens
-    , megaparsec
     , mtl
     , nobs-server
     , random-shuffle
@@ -92,6 +95,7 @@ executable nobs-server
     , wai
     , warp
     , websockets
+    , word8
   default-language: Haskell2010
 
 test-suite nobs-server-test
@@ -101,10 +105,12 @@ test-suite nobs-server-test
       Paths_nobs_server
   hs-source-dirs:
       test
+  default-extensions: BangPatterns BinaryLiterals ConstraintKinds DataKinds DefaultSignatures DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DoAndIfThenElse EmptyDataDecls ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings PartialTypeSignatures PatternGuards PolyKinds RankNTypes RecordWildCards ScopedTypeVariables StandaloneDeriving TupleSections TypeFamilies TypeSynonymInstances ViewPatterns NoImplicitPrelude
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
     , NoBSPoker
+    , attoparsec
     , base >=4.7 && <5
     , base64
     , blaze-html
@@ -112,7 +118,6 @@ test-suite nobs-server-test
     , concurrency
     , containers
     , lens
-    , megaparsec
     , mtl
     , random-shuffle
     , relude
@@ -127,4 +132,5 @@ test-suite nobs-server-test
     , wai
     , warp
     , websockets
+    , word8
   default-language: Haskell2010

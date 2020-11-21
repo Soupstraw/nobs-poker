@@ -6,6 +6,8 @@ module Game
   (
   ) where
 
+import Relude
+
 import Control.Lens
 import Control.Monad.State.Strict
 import Control.Monad.Except
