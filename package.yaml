@@ -21,20 +21,19 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- aeson
 - base64
 - blaze-html
 - bytestring
 - concurrency
 - containers
+- elm-bridge
 - lens
-- attoparsec
-- unliftio
 - MonadRandom
 - mtl
 - random-shuffle
 - relude
 - servant
-- servant-blaze
 - servant-server
 - servant-websockets
 - text

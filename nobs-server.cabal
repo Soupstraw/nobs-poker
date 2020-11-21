@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7b6a771e7e509c6235a7e1670419805a51dd4752bd56352b460edd0ce6f1d73c
+-- hash: 5160a4fe6603969096e06cf76f20ff71dcd357e60ac2ee8295ab62e7ea524af7
 
 name:           nobs-server
 version:        0.1.0.0
@@ -36,24 +36,23 @@ library
   ghc-options: -Wall
   build-depends:
       MonadRandom
-    , attoparsec
+    , aeson
     , base >=4.7 && <5
     , base64
     , blaze-html
     , bytestring
     , concurrency
     , containers
+    , elm-bridge
     , lens
     , mtl
     , random-shuffle
     , relude
     , servant
-    , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
-    , unliftio
     , vector
     , wai
     , warp
@@ -64,7 +63,7 @@ library
 executable nobs-server
   main-is: Main.hs
   other-modules:
-      CommandParser
+      Shared
       Paths_nobs_server
   hs-source-dirs:
       app
@@ -72,25 +71,24 @@ executable nobs-server
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
-    , attoparsec
+    , aeson
     , base >=4.7 && <5
     , base64
     , blaze-html
     , bytestring
     , concurrency
     , containers
+    , elm-bridge
     , lens
     , mtl
     , nobs-server
     , random-shuffle
     , relude
     , servant
-    , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
-    , unliftio
     , vector
     , wai
     , warp
@@ -110,24 +108,23 @@ test-suite nobs-server-test
   build-depends:
       MonadRandom
     , NoBSPoker
-    , attoparsec
+    , aeson
     , base >=4.7 && <5
     , base64
     , blaze-html
     , bytestring
     , concurrency
     , containers
+    , elm-bridge
     , lens
     , mtl
     , random-shuffle
     , relude
     , servant
-    , servant-blaze
     , servant-server
     , servant-websockets
     , text
     , uniplate
-    , unliftio
     , vector
     , wai
     , warp

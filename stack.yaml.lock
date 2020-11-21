@@ -3,7 +3,18 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    name: elm-websocket
+    version: '1.1'
+    git: https://github.com/Soupstraw/elm-websocket
+    pantry-tree:
+      size: 2427
+      sha256: 12ecca2a58c868e0393f6a2c8ffbb6ddf8e3fcee1e00f6b5074b3b7af0886e18
+    commit: 37cac57d1a4255121789b4c7d3c198923c36aa30
+  original:
+    git: https://github.com/Soupstraw/elm-websocket
+    commit: 37cac57d1a4255121789b4c7d3c198923c36aa30
 snapshots:
 - completed:
     size: 531674

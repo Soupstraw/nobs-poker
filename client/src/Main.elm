@@ -10,7 +10,9 @@ import String as S
 import Url exposing (Url)
 import Url.Parser as U
 import Url.Parser exposing ((</>))
-
+import NoBSAPI as API
+import Json.Encode exposing (encode)
+import Json.Decode exposing (decodeString)
 
 port port_sendMessage : String -> Cmd msg
 port port_onConnect : (String -> msg) -> Sub msg
@@ -38,8 +40,14 @@ type alias GameRec =
   , playerNames : List String
   }
 
+type alias MenuRec =
+  {
+  }
+
 type Model 
-  = GameModel GameRec
+  = Game GameRec
+  | MenuModel MenuRec
+  | JoinModel
 
 type Msg 
   = Fold 
@@ -52,10 +60,11 @@ type Msg
   | UrlChange Url
   | UrlReq UrlRequest
   | Connected String
+  | Sit Int
 
 init : a -> b -> c -> (Model, Cmd msg)
 init _ _ _ =
-  ( GameModel 
+  ( Game 
       { raiseAmt = 0
       , minRaise = 10
       , messages = []
@@ -72,61 +81,71 @@ document model =
   }
 
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg (GameModel model) =
+update msg mdl =
+  case mdl of
+    Game model -> handleGameMsg model msg
+    _ -> (mdl, Cmd.none)
+
+handleGameMsg : GameRec -> Msg -> (Model, Cmd Msg)
+handleGameMsg model msg = 
   case msg of
     Draft x  -> 
-      ( GameModel { model | draft = x }
+      ( Game { model | draft = x }
       , Cmd.none
       )
     Raise    -> 
-      ( GameModel { model | raiseAmt = 0}
-      , sendMessage model <| "/raise " ++ String.fromInt model.raiseAmt
+      ( Game { model | raiseAmt = 0}
+      , sendMessage <| API.CRaise <| model.raiseAmt
       )
     Call     ->
-      ( GameModel model
-      , sendMessage model "/call"
+      ( Game model
+      , sendMessage API.CCall
       )
     Fold     ->
-      ( GameModel model
-      , sendMessage model "/fold"
+      ( Game model
+      , sendMessage API.CFold
       )
     Recv x   -> 
-      ( GameModel <| addMessage model x
+      ( Game <| addMessage model x
       , Cmd.none
       )
     Send x   -> 
-      ( GameModel { model | draft = ""}
-      , sendMessage model x
+      ( Game { model | draft = ""}
+      , sendMessage <| API.CSay x
       )
     SetBet x -> case String.toInt x of
       Just amt -> 
-        ( GameModel { model |  raiseAmt = amt }
+        ( Game { model |  raiseAmt = amt }
         , Cmd.none
         )
       Nothing  -> if x == "" 
                     then 
-                      ( GameModel {model | raiseAmt = 0}
+                      ( Game {model | raiseAmt = 0}
                       , Cmd.none
                       )
                     else 
-                      ( GameModel model
+                      ( Game model
                       , Cmd.none
                       )
     Connected x -> case Url.fromString x of
       Just url -> 
         case U.parse (U.s "room" </> U.string) url of
           Just roomId -> 
-            ( GameModel model
-            , sendMessage model <| "/join " ++ roomId
+            ( Game model
+            , sendMessage <| API.CJoin roomId
             )
           Nothing     -> 
-            ( GameModel 
+            ( Game 
                 <| addMessage model 
                 <| "Could not get room ID from the url: " ++ x
             , Cmd.none
             )
-      Nothing  -> (GameModel model, Cmd.none)
-    _ -> (GameModel model, Cmd.none)
+      Nothing  -> (Game model, Cmd.none)
+    Sit x -> 
+      ( Game model
+      , sendMessage <| API.CSit <| x
+      )
+    _ -> (Game model, Cmd.none)
 
 subscriptions : Model -> Sub Msg
 subscriptions model = Sub.batch
@@ -135,21 +154,25 @@ subscriptions model = Sub.batch
   ]
 
 view : Model -> Element Msg
-view (GameModel model) = row 
-  [ width fill
-  , height fill
-  ]
-  [ column 
-      [ width <| fillPortion 3
+view mdl = 
+  case mdl of
+    Game model ->
+      row 
+      [ width fill
       , height fill
       ]
-      [ gameView model
-      , inputRow model
+      [ column 
+          [ width <| fillPortion 3
+          , height fill
+          ]
+          [ gameView model
+          , inputRow model
+          ]
+      , chatView model
       ]
-  , chatView model
-  ]
+    _ -> none
 
-gameView : GameRec -> Element msg
+gameView : GameRec -> Element Msg
 gameView model = el 
   ( [ height <| fillPortion 3
     , width fill
@@ -199,12 +222,11 @@ chatView model = column
 msgElems : GameRec -> List (Element Msg)
 msgElems model = L.map text model.messages
 
-seats : GameRec -> List (Attribute msg)
+seats : GameRec -> List (Attribute Msg)
 seats model = 
   let
-    f i = let ang = 2*pi*i/seatCount
-      in inFront <| tablePlayer (500 * (sin ang)) (250 * (cos ang)) model
-  in L.map (f << toFloat) <| L.range 1 seatCount
+    f i = inFront <| tablePlayer i model
+  in L.map f <| L.range 1 seatCount
 
 inputRow : GameRec -> Element Msg
 inputRow model = row 
@@ -247,12 +269,18 @@ buttonStyle =
   , F.center
   ]
 
-tablePlayer : Float -> Float -> GameRec -> Element msg
-tablePlayer offset_x offset_y model = column
-  (playerStyle ++ [moveRight offset_x, moveDown offset_y])
-  [ text "Player"
-  , text "$1337"
-  ]
+tablePlayer : Int -> GameRec -> Element Msg
+tablePlayer idx model =
+  let ang = 2*pi*(toFloat idx)/seatCount
+  in I.button 
+       [ moveRight (500 * (sin ang))
+       , moveDown (250 * (cos ang))
+       , centerX
+       , centerY
+       ]
+       { onPress = Just <| Sit idx
+       , label = text "Sit"
+       }
 
 playerStyle : List (Attribute msg)
 playerStyle =
@@ -260,9 +288,11 @@ playerStyle =
   , centerY
   ]
 
-sendMessage : GameRec -> String -> Cmd Msg
-sendMessage model msg =
-  port_sendMessage <| (String.fromInt model.roomId) ++ " " ++ msg
+sendMessage : API.ClientMsg -> Cmd Msg
+sendMessage msg =
+  port_sendMessage 
+  <| encode 0
+  <| API.jsonEncClientMsg msg
 
 addMessage : GameRec -> String -> GameRec
 addMessage model msg = 

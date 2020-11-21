@@ -3,11 +3,15 @@
 
 module Main (main) where
 
-import Relude
+import Relude hiding (ByteString)
 import Relude.Extra.Map
 
+import Control.Concurrent.MVar (withMVar)
 import Control.Monad.Random
 import Control.Lens hiding (Fold)
+
+import Data.Aeson
+import Data.ByteString.Lazy (ByteString)
 
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -16,20 +20,30 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-import CommandParser
+import Shared
 
-type UserID = Word
-type RoomID = Word
+newtype UserID = UserID Text
+  deriving (Eq, Ord, Show)
+
+instance Random UserID where
+  random g =
+    do
+      let (n, g') = next g
+      (UserID $ show n, g')
+
+type RoomID = Text
 
 data User = User
   { _userName :: MVar Text
   , _userConn :: MVar Connection
+  , _userRoom :: MVar (Maybe RoomID)
   }
 makeLenses 'User
 
 data Room = Room
   { _roomUsers :: MVar [UserID]
   }
+makeLenses 'Room
 
 data ServerState = ServerState
   { _ssUserPool :: Map UserID User
@@ -48,14 +62,6 @@ emptyState = ServerState mempty mempty
 runNoBSM :: NoBSM a -> IORef ServerState -> Handler a
 runNoBSM m s = evalRandT (runReaderT m s) (mkStdGen 0)
 
-runNoBSM_ :: NoBSM a -> IORef ServerState -> IO a
-runNoBSM_ m st = 
-  do
-    res <- runHandler $ evalRandT (runReaderT m st) (mkStdGen 0)
-    case res of
-      Right x -> return x
-      Left x  -> error $ "Server error: " <> show x
-
 addUser 
   :: ( MonadRandom m
      , MonadReader (IORef ServerState) m
@@ -65,8 +71,7 @@ addUser
   -> m UserID
 addUser conn = 
   do
-    ior <- ask
-    st <- liftIO $ readIORef ior
+    st <- readIORef =<< ask
     let userPool = st ^. ssUserPool
     uid <- getRandom
     if member uid userPool
@@ -75,8 +80,10 @@ addUser conn =
         let pname = "Player#" <> show uid
         mvarConn <- newMVar conn
         mvarName <- newMVar pname
-        let newUser = User mvarName mvarConn
-        modifyIORef ior $ ssUserPool %~ insert uid newUser
+        mvarRoom <- newEmptyMVar
+        let newUser = User mvarName mvarConn mvarRoom
+        mdf <- modifyIORef <$> ask
+        mdf $ ssUserPool %~ insert uid newUser
         putTextLn $ "Added player " <> pname
         return uid
 
@@ -95,7 +102,7 @@ serveSocket
   -> m ()
 serveSocket conn =
   do
-    putStrLn "New connection!"
+    putTextLn "New connection!"
     liftIO $ sendTextData conn ("Welcome!" :: Text)
     uid <- addUser conn
     serveClient uid
@@ -109,36 +116,72 @@ serveClient
   -> m ()
 serveClient uid =
   do
-    ior <- ask
-    st <- liftIO $ readIORef ior
+    st <- readIORef =<< ask
     let mconn = st ^? ssUserPool . at uid . _Just . userConn
     case mconn of
       Just x -> do
         conn <- takeMVar x
         msg <- liftIO $ receiveData conn
         putMVar x conn
-        liftIO $ handleMsg uid msg
+        handleMsg uid msg
         serveClient uid
       Nothing -> putStrLn $ "Failed to get connection by uid " <> show uid
 
 handleMsg 
-  :: MonadIO m
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     )
   => UserID
-  -> Text
+  -> ByteString
   -> m ()
 handleMsg userId msg = 
   do
     putTextLn $ "Parsing message from " <> show userId
-    putTextLn $ show msg
-    let (roomId, command) = parseMessage msg
-    putTextLn $ "Message sent to room " <> show roomId
-    case command of
-      Join x  -> putTextLn $ "join "  <> show x
-      Say x   -> putTextLn $ show x
-      Raise x -> putTextLn $ "raise " <> show x
-      Call    -> putTextLn "call"
-      Fold    -> putTextLn "fold"
-      Error x -> putTextLn $ "command parse error: " <> x
+    case decode msg of
+      Nothing  -> putTextLn $ "Failed to parse message: " <> show msg
+      Just cmd -> doCommand userId cmd
+
+doCommand 
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     )
+  => UserID 
+  -> ClientMsg 
+  -> m ()
+doCommand userId (CJoin roomId) = 
+  do
+    st <- getServerState
+    case st ^. ssRoomPool . at roomId of
+      Just room -> 
+        do
+          void . liftIO . withMVar (room ^. roomUsers) $ \usrs ->
+            if userId `elem` usrs
+              then do
+                putTextLn "Player is already in room"
+                return usrs
+              else do
+                sendMessage userId $ SList
+                return $ cons userId usrs
+      Nothing   -> putTextLn $ "Room " <> show roomId <> " does not exist."
+doCommand _ _ = undefined
+
+sendMessage userId msg = 
+  do
+    undefined
+
+getServerState
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     )
+  => m ServerState
+getServerState = readIORef =<< ask
+
+modifyServerState
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     )
+  => (ServerState -> ServerState) -> m ()
+modifyServerState f = (`modifyIORef` f) =<< ask
 
 nobsServer 
   :: ( MonadIO m
@@ -156,7 +199,10 @@ app s = serve nobsAPI $ hoistServer nobsAPI (`runNoBSM` s) nobsServer
 main :: IO ()
 main = 
   do
-    putStrLn "Starting server at port 8080"
+    let modulePath = "client/src/NoBSAPI.elm" 
+    putTextLn $ "Generating Elm API module at " <> toText modulePath
+    writeFileText modulePath generateModule
+    putTextLn "Starting server at port 8080"
     ref <- newIORef emptyState
     run 8080 (app ref)
 
