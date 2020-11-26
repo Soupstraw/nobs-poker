@@ -28,9 +28,11 @@ dependencies:
 - concurrency
 - containers
 - elm-bridge
+- katip
 - lens
 - MonadRandom
 - mtl
+- opaleye
 - random-shuffle
 - relude
 - servant

@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5160a4fe6603969096e06cf76f20ff71dcd357e60ac2ee8295ab62e7ea524af7
+-- hash: c569642a3830e8c46379c135421cdc9bbc0579b12edda417fcce254c409a762a
 
 name:           nobs-server
 version:        0.1.0.0
@@ -44,8 +44,10 @@ library
     , concurrency
     , containers
     , elm-bridge
+    , katip
     , lens
     , mtl
+    , opaleye
     , random-shuffle
     , relude
     , servant
@@ -79,9 +81,11 @@ executable nobs-server
     , concurrency
     , containers
     , elm-bridge
+    , katip
     , lens
     , mtl
     , nobs-server
+    , opaleye
     , random-shuffle
     , relude
     , servant
@@ -116,8 +120,10 @@ test-suite nobs-server-test
     , concurrency
     , containers
     , elm-bridge
+    , katip
     , lens
     , mtl
+    , opaleye
     , random-shuffle
     , relude
     , servant

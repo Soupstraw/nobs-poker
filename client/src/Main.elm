@@ -1,18 +1,27 @@
 port module Main exposing (..)
 
 import Browser exposing (..)
-import List as L
+import Browser.Navigation exposing (Key)
+
 import Element exposing (..)
-import Element.Input as I
 import Element.Border as B
 import Element.Font as F
+import Element.Input as I
+
+import Json.Decode exposing (decodeString)
+import Json.Encode exposing (encode)
+
+import List as L
+
+import Maybe.Extra exposing (..)
+
+import NoBSAPI as API
+
 import String as S
+
 import Url exposing (Url)
 import Url.Parser as U
 import Url.Parser exposing ((</>))
-import NoBSAPI as API
-import Json.Encode exposing (encode)
-import Json.Decode exposing (decodeString)
 
 port port_sendMessage : String -> Cmd msg
 port port_onConnect : (String -> msg) -> Sub msg
@@ -44,16 +53,20 @@ type alias MenuRec =
   {
   }
 
+type alias ConnRec =
+  {
+  }
+
 type Model 
   = Game GameRec
-  | MenuModel MenuRec
-  | JoinModel
+  | Menu MenuRec
+  | Conn ConnRec
 
 type Msg 
   = Fold 
   | Call 
   | Raise
-  | Send String
+  | Send API.ClientMsg
   | Recv String
   | Draft String
   | SetBet String
@@ -61,9 +74,10 @@ type Msg
   | UrlReq UrlRequest
   | Connected String
   | Sit Int
+  | CreateRoom
 
-init : a -> b -> c -> (Model, Cmd msg)
-init _ _ _ =
+init : a -> Url -> Key -> (Model, Cmd msg)
+init _ url key =
   ( Game 
       { raiseAmt = 0
       , minRaise = 10
@@ -84,7 +98,8 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg mdl =
   case mdl of
     Game model -> handleGameMsg model msg
-    _ -> (mdl, Cmd.none)
+    Menu model -> handleMenuMsg model msg
+    Conn model -> handleConnMsg model msg
 
 handleGameMsg : GameRec -> Msg -> (Model, Cmd Msg)
 handleGameMsg model msg = 
@@ -111,7 +126,7 @@ handleGameMsg model msg =
       )
     Send x   -> 
       ( Game { model | draft = ""}
-      , sendMessage <| API.CSay x
+      , sendMessage x
       )
     SetBet x -> case String.toInt x of
       Just amt -> 
@@ -135,9 +150,7 @@ handleGameMsg model msg =
             , sendMessage <| API.CJoin roomId
             )
           Nothing     -> 
-            ( Game 
-                <| addMessage model 
-                <| "Could not get room ID from the url: " ++ x
+            ( Menu {}
             , Cmd.none
             )
       Nothing  -> (Game model, Cmd.none)
@@ -146,6 +159,41 @@ handleGameMsg model msg =
       , sendMessage <| API.CSit <| x
       )
     _ -> (Game model, Cmd.none)
+
+handleMenuMsg : MenuRec -> Msg -> (Model, Cmd Msg)
+handleMenuMsg model msg =
+  case msg of
+    CreateRoom ->
+      ( Conn {}
+      , sendMessage API.CCreateRoom
+      )
+    _ -> (Menu model, Cmd.none)
+
+handleConnMsg : ConnRec -> Msg -> (Model, Cmd Msg)
+handleConnMsg model msg =
+  case msg of
+    Recv m ->
+      case decodeString API.jsonDecServerMsg m of
+        Ok (API.SRoomCreated roomId) -> Debug.log "Got room created confirmation"
+          ( Conn model
+          , sendMessage <| API.CJoin roomId
+          )
+        Ok (API.SRoomData info) -> Debug.log "Got room info"
+          ( Game <| fromData info
+          , Cmd.none
+          )
+        _ -> Debug.log "Unexpected command" (Conn model, Cmd.none)
+    _ -> Debug.log "Command parsing failed" (Conn model, Cmd.none)
+
+fromData : API.RoomData -> GameRec
+fromData data = 
+  { raiseAmt = 0
+  , draft = ""
+  , messages = []
+  , minRaise = 0
+  , playerNames = L.map .pUserID data.rdPlayers
+  , roomId = 0
+  }
 
 subscriptions : Model -> Sub Msg
 subscriptions model = Sub.batch
@@ -170,7 +218,30 @@ view mdl =
           ]
       , chatView model
       ]
-    _ -> none
+    Menu model ->
+      row
+        [ width fill
+        , height fill
+        ]
+        [ I.button 
+            [ width fill
+            , height fill
+            , centerX
+            , centerY
+            , F.center
+            ]
+            { label = text "Create room"
+            , onPress = Just CreateRoom
+            }
+        ]
+    Conn model ->
+      row
+        [ width fill
+        , height fill
+        , F.center
+        ]
+        [ text "Connecting.."
+        ]
 
 gameView : GameRec -> Element Msg
 gameView model = el 
@@ -214,7 +285,7 @@ chatView model = column
           }
       , I.button [alignRight]
           { label = text "Send"
-          , onPress = Just <| Send model.draft
+          , onPress = Just <| Send (API.CSay model.draft)
           }
       ]
   ]

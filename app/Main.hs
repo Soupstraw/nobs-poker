@@ -6,12 +6,15 @@ module Main (main) where
 import Relude hiding (ByteString)
 import Relude.Extra.Map
 
-import Control.Concurrent.MVar (withMVar)
+import Control.Exception (bracket)
 import Control.Monad.Random
 import Control.Lens hiding (Fold)
 
 import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
+import Data.Map ()
+
+import Katip
 
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -20,34 +23,35 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
+import qualified Text.Show as T
+
 import Shared
 
-newtype UserID = UserID Text
-  deriving (Eq, Ord, Show)
+newtype Unique = Unique Text
+  deriving (Eq, Ord)
 
-instance Random UserID where
-  random g =
-    do
-      let (n, g') = next g
-      (UserID $ show n, g')
+instance Show Unique where
+  show (Unique x) = toString x
 
-type RoomID = Text
+instance Random Unique where
+  random g = (Unique $ show (x :: Word64), g')
+    where (x, g') = random g
 
 data User = User
   { _userName :: MVar Text
   , _userConn :: MVar Connection
-  , _userRoom :: MVar (Maybe RoomID)
+  , _userRoom :: MVar (Maybe Unique)
   }
 makeLenses 'User
 
 data Room = Room
-  { _roomUsers :: MVar [UserID]
+  { _roomUsers :: MVar [Unique]
   }
 makeLenses 'Room
 
 data ServerState = ServerState
-  { _ssUserPool :: Map UserID User
-  , _ssRoomPool :: Map RoomID Room
+  { _ssUserPool :: Map Unique User
+  , _ssRoomPool :: Map Unique Room
   }
 makeLenses 'ServerState
 
@@ -68,7 +72,7 @@ addUser
      , MonadIO m
      )
   => Connection 
-  -> m UserID
+  -> m Unique
 addUser conn = 
   do
     st <- readIORef =<< ask
@@ -112,7 +116,7 @@ serveClient
      , MonadRandom m
      , MonadReader (IORef ServerState) m
      )
-  => UserID 
+  => Unique 
   -> m ()
 serveClient uid =
   do
@@ -130,8 +134,9 @@ serveClient uid =
 handleMsg 
   :: ( MonadIO m
      , MonadReader (IORef ServerState) m
+     , MonadRandom m
      )
-  => UserID
+  => Unique
   -> ByteString
   -> m ()
 handleMsg userId msg = 
@@ -144,30 +149,112 @@ handleMsg userId msg =
 doCommand 
   :: ( MonadIO m
      , MonadReader (IORef ServerState) m
+     , MonadRandom m
      )
-  => UserID 
+  => Unique 
   -> ClientMsg 
   -> m ()
-doCommand userId (CJoin roomId) = 
+doCommand userId (CJoin r) = 
   do
+    putTextLn "Received a room join request"
     st <- getServerState
+    let roomId = Unique r
     case st ^. ssRoomPool . at roomId of
       Just room -> 
         do
-          void . liftIO . withMVar (room ^. roomUsers) $ \usrs ->
-            if userId `elem` usrs
-              then do
-                putTextLn "Player is already in room"
-                return usrs
-              else do
-                sendMessage userId $ SList
-                return $ cons userId usrs
+          let var = room ^. roomUsers
+          usrs <- liftIO $ readMVar var
+          res <- if userId `elem` usrs
+            then do
+              putTextLn "Player is already in room"
+              return usrs
+            else do
+              putTextLn "Sending connection data.."
+              rd <- roomData room
+              addUserToRoom userId roomId
+              sendMessage userId $ SRoomData rd
+              return $ cons userId usrs
+          liftIO $ putMVar var res
       Nothing   -> putTextLn $ "Room " <> show roomId <> " does not exist."
+doCommand userId CCreateRoom =
+  do
+    st <- getServerState
+    roomId <- getRandom
+    case st ^. ssRoomPool . at roomId of
+      Just _  -> doCommand userId CCreateRoom
+      Nothing -> 
+        do
+          userList <- newMVar []
+          modifyServerState $ ssRoomPool %~ insert roomId (Room userList)
+          putTextLn $ "Created room " <> show roomId
+          sendMessage userId (SRoomCreated $ show roomId)
 doCommand _ _ = undefined
 
+addUserToRoom
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     , MonadRandom m
+     )
+  => Unique 
+  -> Unique 
+  -> m ()
+addUserToRoom userId roomId = undefined
+
+roomData 
+  :: ( MonadIO m
+     , MonadReader (IORef ServerState) m
+     )
+  => Room 
+  -> m RoomData
+roomData room = 
+  do
+    userIds <- readMVar $ room ^. roomUsers
+    players <- traverse getPlayer userIds
+    return $ RoomData players
+
+getUser 
+  :: ( MonadReader (IORef ServerState) m
+     , MonadIO m
+     )
+  => Unique 
+  -> m User
+getUser userId =
+  do
+    st <- getServerState
+    case st ^. ssUserPool . at userId of
+      Nothing -> error $ "User not found: " <> show userId
+      Just u  -> return u
+
+getConnection 
+  :: ( MonadReader (IORef ServerState) m
+     , MonadIO m
+     )
+  => Unique 
+  -> m Connection
+getConnection userId =
+  do
+    usr <- getUser userId
+    readMVar $ usr ^. userConn
+
+getPlayer
+  :: ( MonadReader (IORef ServerState) m
+     , MonadIO m
+     )
+  => Unique 
+  -> m Player
+getPlayer userId = return . Player $ show userId
+
+sendMessage 
+  :: ( MonadReader (IORef ServerState) m
+     , MonadIO m
+     )
+  => Unique 
+  -> ServerMsg 
+  -> m ()
 sendMessage userId msg = 
   do
-    undefined
+    conn <- getConnection userId
+    liftIO $ sendTextData conn $ encode msg
 
 getServerState
   :: ( MonadIO m
@@ -194,15 +281,33 @@ nobsServer = serveSocket
         :<|> serveIndex
 
 app :: IORef ServerState -> Application
-app s = serve nobsAPI $ hoistServer nobsAPI (`runNoBSM` s) nobsServer
+app s = serve nobsAPI $ hoistServer nobsAPI runStack nobsServer
+  where 
+    runStack :: NoBSM a -> Handler a
+    runStack x = runNoBSM x s
 
 main :: IO ()
 main = 
   do
+    -- Set up logging
+    handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
+    logEnv <- initLogEnv "NoBSServer" "production"
+    let mkLogEnv :: IO LogEnv
+        mkLogEnv = registerScribe "stdout" handleScribe defaultScribeSettings logEnv
+    bracket mkLogEnv closeScribes startServer
+
+startServer 
+  :: LogEnv
+  -> IO ()
+startServer logEnv = runKatipT logEnv $ do
+    -- Generate Elm API module
+    -- TODO move this to a different executable
     let modulePath = "client/src/NoBSAPI.elm" 
-    putTextLn $ "Generating Elm API module at " <> toText modulePath
+    logFM InfoS $ "Generating Elm API module at " <> fromString modulePath
     writeFileText modulePath generateModule
+
+    -- Start the server
     putTextLn "Starting server at port 8080"
     ref <- newIORef emptyState
-    run 8080 (app ref)
+    liftIO . run 8080 $ app ref
 

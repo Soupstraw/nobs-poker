@@ -2,6 +2,7 @@
 
 module Shared 
   ( ClientMsg(..), ServerMsg(..)
+  , RoomData(..), Player(..)
   , generateModule
   ) where
 
@@ -11,14 +12,19 @@ import Elm.Derive
 import Elm.Module
 
 data Player = Player
-  { pName   :: Text
-  , pUserID :: Text
+  { pUserID :: Text
   }
   deriving (Show)
 deriveBoth defaultOptions ''Player
 
+data RoomData = RoomData
+  { rdPlayers :: [Player]
+  }
+deriveBoth defaultOptions ''RoomData
+
 data ClientMsg
   = CJoin Text
+  | CCreateRoom
   | CLeave
   | CSit Int
   | CSay Text
@@ -29,7 +35,7 @@ data ClientMsg
 deriveBoth defaultOptions ''ClientMsg
 
 data ServerMsg
-  = SList [Text]
+  = SRoomData RoomData
   | SJoin Player
   | SLeave Text
   | SSit Text Int
@@ -37,6 +43,7 @@ data ServerMsg
   | SCall Text
   | SFold Text
   | SDrawCards
+  | SRoomCreated Text
 deriveBoth defaultOptions ''ServerMsg
 
 generateModule :: Text
@@ -44,5 +51,6 @@ generateModule = toText $ makeElmModule "NoBSAPI"
   [ DefineElm (Proxy :: Proxy ClientMsg)
   , DefineElm (Proxy :: Proxy ServerMsg)
   , DefineElm (Proxy :: Proxy Player)
+  , DefineElm (Proxy :: Proxy RoomData)
   ]
 
