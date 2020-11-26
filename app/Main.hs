@@ -58,18 +58,19 @@ makeLenses 'ServerState
 type NoBSAPI = "socket" :> WebSocket
           :<|> "room" :> Capture "roomId" Text :> Raw
           :<|> Raw
-type NoBSM = ReaderT (IORef ServerState) (RandT StdGen Handler)
+type NoBSM = ReaderT (IORef ServerState) (RandT StdGen (KatipContextT Handler))
 
 emptyState :: ServerState
 emptyState = ServerState mempty mempty
 
-runNoBSM :: NoBSM a -> IORef ServerState -> Handler a
-runNoBSM m s = evalRandT (runReaderT m s) (mkStdGen 0)
+runNoBSM :: NoBSM a -> IORef ServerState -> LogEnv -> Handler a
+runNoBSM m s le = runKatipContextT le () "main" $ evalRandT (runReaderT m s) (mkStdGen 0)
 
 addUser 
   :: ( MonadRandom m
      , MonadReader (IORef ServerState) m
      , MonadIO m
+     , KatipContext m
      )
   => Connection 
   -> m Unique
@@ -88,7 +89,7 @@ addUser conn =
         let newUser = User mvarName mvarConn mvarRoom
         mdf <- modifyIORef <$> ask
         mdf $ ssUserPool %~ insert uid newUser
-        putTextLn $ "Added player " <> pname
+        $(logTM) DebugS . ls $ "Added player " <> pname
         return uid
 
 nobsAPI :: Proxy NoBSAPI
@@ -101,6 +102,7 @@ serveSocket
   :: ( MonadIO m
      , MonadReader (IORef ServerState) m
      , MonadRandom m
+     , KatipContext m
      )
   => Connection 
   -> m ()
@@ -274,17 +276,18 @@ nobsServer
   :: ( MonadIO m
      , MonadReader (IORef ServerState) m
      , MonadRandom m
+     , KatipContext m
      )
   => ServerT NoBSAPI m
 nobsServer = serveSocket
         :<|> const serveIndex
         :<|> serveIndex
 
-app :: IORef ServerState -> Application
-app s = serve nobsAPI $ hoistServer nobsAPI runStack nobsServer
+app :: LogEnv -> IORef ServerState -> Application
+app le s = serve nobsAPI $ hoistServer nobsAPI (runStack le) nobsServer
   where 
-    runStack :: NoBSM a -> Handler a
-    runStack x = runNoBSM x s
+    runStack :: LogEnv -> NoBSM a -> Handler a
+    runStack le x = runNoBSM x s le
 
 main :: IO ()
 main = 
@@ -294,20 +297,16 @@ main =
     logEnv <- initLogEnv "NoBSServer" "production"
     let mkLogEnv :: IO LogEnv
         mkLogEnv = registerScribe "stdout" handleScribe defaultScribeSettings logEnv
-    bracket mkLogEnv closeScribes startServer
+    bracket mkLogEnv closeScribes $ \le -> do
+      runKatipContextT le () "main" $ do
+        -- Generate Elm API module
+        -- TODO move this to a different executable
+        let modulePath = "client/src/NoBSAPI.elm" 
+        $(logTM) InfoS $ "Generating Elm API module at " <> fromString modulePath
+        writeFileText modulePath generateModule
 
-startServer 
-  :: LogEnv
-  -> IO ()
-startServer logEnv = runKatipT logEnv $ do
-    -- Generate Elm API module
-    -- TODO move this to a different executable
-    let modulePath = "client/src/NoBSAPI.elm" 
-    logFM InfoS $ "Generating Elm API module at " <> fromString modulePath
-    writeFileText modulePath generateModule
-
-    -- Start the server
-    putTextLn "Starting server at port 8080"
-    ref <- newIORef emptyState
-    liftIO . run 8080 $ app ref
+        -- Start the server
+        $(logTM) InfoS "Starting server at port 8080"
+        ref <- newIORef emptyState
+        liftIO . run 8080 $ app le ref
 

@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c569642a3830e8c46379c135421cdc9bbc0579b12edda417fcce254c409a762a
+-- hash: 371f462b43fd30acde1ca205dc5208d668cdfe6d5ce542a0fd427c0e20707bf1
 
 name:           nobs-server
 version:        0.1.0.0
@@ -44,6 +44,7 @@ library
     , concurrency
     , containers
     , elm-bridge
+    , formatting
     , katip
     , lens
     , mtl
@@ -81,6 +82,7 @@ executable nobs-server
     , concurrency
     , containers
     , elm-bridge
+    , formatting
     , katip
     , lens
     , mtl
@@ -120,6 +122,7 @@ test-suite nobs-server-test
     , concurrency
     , containers
     , elm-bridge
+    , formatting
     , katip
     , lens
     , mtl
