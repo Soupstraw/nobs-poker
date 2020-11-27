@@ -58,17 +58,50 @@ makeLenses 'ServerState
 type NoBSAPI = "socket" :> WebSocket
           :<|> "room" :> Capture "roomId" Text :> Raw
           :<|> Raw
-type NoBSM = ReaderT (IORef ServerState) (RandT StdGen (KatipContextT Handler))
+
+data NoBSState = NoBSState
+  { _nsServerState  :: IORef ServerState
+  , _nsLogNamespace :: Namespace
+  , _nsLogContext   :: LogContexts
+  , _nsLogEnv       :: LogEnv
+  }
+makeLenses ' NoBSState
+
+newtype NoBS a = NoBS
+  { unNoBS :: ReaderT NoBSState (RandT StdGen (KatipContextT Handler)) a
+  } deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadReader NoBSState
+             , MonadRandom 
+             , MonadIO
+             )
+
+instance Katip NoBS where
+  getLogEnv = view nsLogEnv
+  localLogEnv  f (NoBS m) = NoBS $ local (over nsLogEnv f) m
+
+instance KatipContext NoBS where
+  getKatipContext = view nsLogContext
+  localKatipContext f (NoBS m) = NoBS $ local (over nsLogContext f) m
+  getKatipNamespace = view nsLogNamespace
+  localKatipNamespace f (NoBS m) = NoBS $ local (over nsLogNamespace f) m
+
+runNoBS :: NoBSState -> NoBS a -> Handler a
+runNoBS s m = 
+  do
+    gen <- liftIO getStdGen
+    let ctx = s ^. nsLogContext
+    let ns = s ^. nsLogNamespace
+    let le = s ^. nsLogEnv
+    runKatipContextT le ctx ns $ evalRandT (runReaderT (unNoBS m) s) gen
 
 emptyState :: ServerState
 emptyState = ServerState mempty mempty
 
-runNoBSM :: NoBSM a -> IORef ServerState -> LogEnv -> Handler a
-runNoBSM m s le = runKatipContextT le () "main" $ evalRandT (runReaderT m s) (mkStdGen 0)
-
 addUser 
   :: ( MonadRandom m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadIO m
      , KatipContext m
      )
@@ -76,7 +109,7 @@ addUser
   -> m Unique
 addUser conn = 
   do
-    st <- readIORef =<< ask
+    st <- readIORef =<< view nsServerState
     let userPool = st ^. ssUserPool
     uid <- getRandom
     if member uid userPool
@@ -87,7 +120,7 @@ addUser conn =
         mvarName <- newMVar pname
         mvarRoom <- newEmptyMVar
         let newUser = User mvarName mvarConn mvarRoom
-        mdf <- modifyIORef <$> ask
+        mdf <- modifyIORef <$> view nsServerState
         mdf $ ssUserPool %~ insert uid newUser
         $(logTM) DebugS . ls $ "Added player " <> pname
         return uid
@@ -100,7 +133,7 @@ serveIndex = serveDirectoryFileServer "client"
 
 serveSocket 
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadRandom m
      , KatipContext m
      )
@@ -108,7 +141,7 @@ serveSocket
   -> m ()
 serveSocket conn =
   do
-    putTextLn "New connection!"
+    $(logTM) InfoS "New connection!"
     liftIO $ sendTextData conn ("Welcome!" :: Text)
     uid <- addUser conn
     serveClient uid
@@ -116,13 +149,14 @@ serveSocket conn =
 serveClient 
   :: ( MonadIO m
      , MonadRandom m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
+     , KatipContext m
      )
   => Unique 
   -> m ()
 serveClient uid =
   do
-    st <- readIORef =<< ask
+    st <- readIORef =<< view nsServerState
     let mconn = st ^? ssUserPool . at uid . _Just . userConn
     case mconn of
       Just x -> do
@@ -131,34 +165,36 @@ serveClient uid =
         putMVar x conn
         handleMsg uid msg
         serveClient uid
-      Nothing -> putStrLn $ "Failed to get connection by uid " <> show uid
+      Nothing -> $(logTM) ErrorS $ "Failed to get connection by uid " <> show uid
 
 handleMsg 
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadRandom m
+     , KatipContext m
      )
   => Unique
   -> ByteString
   -> m ()
 handleMsg userId msg = 
   do
-    putTextLn $ "Parsing message from " <> show userId
+    $(logTM) InfoS $ "Parsing message from " <> show userId
     case decode msg of
-      Nothing  -> putTextLn $ "Failed to parse message: " <> show msg
+      Nothing  -> $(logTM) ErrorS $ "Failed to parse message: " <> show msg
       Just cmd -> doCommand userId cmd
 
 doCommand 
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadRandom m
+     , KatipContext m
      )
   => Unique 
   -> ClientMsg 
   -> m ()
 doCommand userId (CJoin r) = 
   do
-    putTextLn "Received a room join request"
+    $(logTM) InfoS "Received a room join request"
     st <- getServerState
     let roomId = Unique r
     case st ^. ssRoomPool . at roomId of
@@ -168,16 +204,16 @@ doCommand userId (CJoin r) =
           usrs <- liftIO $ readMVar var
           res <- if userId `elem` usrs
             then do
-              putTextLn "Player is already in room"
+              $(logTM) ErrorS "Player is already in room"
               return usrs
             else do
-              putTextLn "Sending connection data.."
+              $(logTM) InfoS "Sending connection data.."
               rd <- roomData room
               addUserToRoom userId roomId
               sendMessage userId $ SRoomData rd
               return $ cons userId usrs
           liftIO $ putMVar var res
-      Nothing   -> putTextLn $ "Room " <> show roomId <> " does not exist."
+      Nothing   -> $(logTM) ErrorS $ "Room " <> show roomId <> " does not exist."
 doCommand userId CCreateRoom =
   do
     st <- getServerState
@@ -188,23 +224,25 @@ doCommand userId CCreateRoom =
         do
           userList <- newMVar []
           modifyServerState $ ssRoomPool %~ insert roomId (Room userList)
-          putTextLn $ "Created room " <> show roomId
+          $(logTM) InfoS $ "Created room " <> show roomId
           sendMessage userId (SRoomCreated $ show roomId)
 doCommand _ _ = undefined
 
 addUserToRoom
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadRandom m
      )
   => Unique 
   -> Unique 
   -> m ()
-addUserToRoom userId roomId = undefined
+addUserToRoom userId roomId =
+  do
+    undefined
 
 roomData 
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      )
   => Room 
   -> m RoomData
@@ -215,7 +253,7 @@ roomData room =
     return $ RoomData players
 
 getUser 
-  :: ( MonadReader (IORef ServerState) m
+  :: ( MonadReader NoBSState m
      , MonadIO m
      )
   => Unique 
@@ -228,7 +266,7 @@ getUser userId =
       Just u  -> return u
 
 getConnection 
-  :: ( MonadReader (IORef ServerState) m
+  :: ( MonadReader NoBSState m
      , MonadIO m
      )
   => Unique 
@@ -239,7 +277,7 @@ getConnection userId =
     readMVar $ usr ^. userConn
 
 getPlayer
-  :: ( MonadReader (IORef ServerState) m
+  :: ( MonadReader NoBSState m
      , MonadIO m
      )
   => Unique 
@@ -247,7 +285,7 @@ getPlayer
 getPlayer userId = return . Player $ show userId
 
 sendMessage 
-  :: ( MonadReader (IORef ServerState) m
+  :: ( MonadReader NoBSState m
      , MonadIO m
      )
   => Unique 
@@ -260,21 +298,21 @@ sendMessage userId msg =
 
 getServerState
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      )
   => m ServerState
-getServerState = readIORef =<< ask
+getServerState = readIORef =<< view nsServerState
 
 modifyServerState
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      )
   => (ServerState -> ServerState) -> m ()
-modifyServerState f = (`modifyIORef` f) =<< ask
+modifyServerState f = (`modifyIORef` f) =<< view nsServerState
 
 nobsServer 
   :: ( MonadIO m
-     , MonadReader (IORef ServerState) m
+     , MonadReader NoBSState m
      , MonadRandom m
      , KatipContext m
      )
@@ -283,11 +321,8 @@ nobsServer = serveSocket
         :<|> const serveIndex
         :<|> serveIndex
 
-app :: LogEnv -> IORef ServerState -> Application
-app le s = serve nobsAPI $ hoistServer nobsAPI (runStack le) nobsServer
-  where 
-    runStack :: LogEnv -> NoBSM a -> Handler a
-    runStack le x = runNoBSM x s le
+app :: LogEnv -> NoBSState -> Application
+app le s = serve nobsAPI $ hoistServer nobsAPI (runNoBS s) nobsServer
 
 main :: IO ()
 main = 
@@ -308,5 +343,11 @@ main =
         -- Start the server
         $(logTM) InfoS "Starting server at port 8080"
         ref <- newIORef emptyState
-        liftIO . run 8080 $ app le ref
+        let state = NoBSState
+              { _nsServerState = ref
+              , _nsLogEnv = le
+              , _nsLogContext = mempty
+              , _nsLogNamespace = "main"
+              }
+        liftIO . run 8080 $ app le state
 
