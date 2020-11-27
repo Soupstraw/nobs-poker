@@ -41,12 +41,12 @@ main = application
   }
 
 type alias GameRec = 
-  { raiseAmt    : Int
-  , minRaise    : Int
-  , messages    : List String
-  , draft       : String
-  , roomId      : Int
-  , playerNames : List String
+  { raiseAmt : Int
+  , minRaise : Int
+  , messages : List String
+  , draft    : String
+  , roomId   : Int
+  , players  : List API.Player
   }
 
 type alias MenuRec =
@@ -78,14 +78,7 @@ type Msg
 
 init : a -> Url -> Key -> (Model, Cmd msg)
 init _ url key =
-  ( Game 
-      { raiseAmt = 0
-      , minRaise = 10
-      , messages = []
-      , draft = ""
-      , roomId = 0
-      , playerNames = []
-      }
+  ( Conn {} 
   , Cmd.none)
 
 document : Model -> Document Msg
@@ -120,10 +113,17 @@ handleGameMsg model msg =
       ( Game model
       , sendMessage API.CFold
       )
-    Recv x   -> 
-      ( Game <| addMessage model x
-      , Cmd.none
-      )
+    Recv m   -> 
+      case decodeString API.jsonDecServerMsg m of
+        Ok (API.SJoin userId) ->
+          ( Game { model | players = model.players ++ [userId] }
+          , Cmd.none
+          )
+        Ok (API.SSay user sayMsg) ->
+          ( Game <| addMessage model <| user.pUserID ++ ": " ++ sayMsg
+          , Cmd.none
+          )
+        x -> Debug.todo <| "Unexpected command: " ++ Debug.toString x
     Send x   -> 
       ( Game { model | draft = ""}
       , sendMessage x
@@ -142,23 +142,11 @@ handleGameMsg model msg =
                       ( Game model
                       , Cmd.none
                       )
-    Connected x -> case Url.fromString x of
-      Just url -> 
-        case U.parse (U.s "room" </> U.string) url of
-          Just roomId -> 
-            ( Game model
-            , sendMessage <| API.CJoin roomId
-            )
-          Nothing     -> 
-            ( Menu {}
-            , Cmd.none
-            )
-      Nothing  -> (Game model, Cmd.none)
     Sit x -> 
       ( Game model
       , sendMessage <| API.CSit <| x
       )
-    _ -> (Game model, Cmd.none)
+    x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
 
 handleMenuMsg : MenuRec -> Msg -> (Model, Cmd Msg)
 handleMenuMsg model msg =
@@ -167,11 +155,23 @@ handleMenuMsg model msg =
       ( Conn {}
       , sendMessage API.CCreateRoom
       )
-    _ -> (Menu model, Cmd.none)
+    x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
 
 handleConnMsg : ConnRec -> Msg -> (Model, Cmd Msg)
 handleConnMsg model msg =
   case msg of
+    Connected x -> case Url.fromString x of
+      Just url -> 
+        case U.parse (U.s "room" </> U.string) url of
+          Just roomId -> 
+            ( Conn model
+            , sendMessage <| API.CJoin roomId
+            )
+          Nothing     -> 
+            ( Menu {}
+            , Cmd.none
+            )
+      Nothing  -> (Conn model, Cmd.none)
     Recv m ->
       case decodeString API.jsonDecServerMsg m of
         Ok (API.SRoomCreated roomId) -> Debug.log "Got room created confirmation"
@@ -182,8 +182,8 @@ handleConnMsg model msg =
           ( Game <| fromData info
           , Cmd.none
           )
-        _ -> Debug.log "Unexpected command" (Conn model, Cmd.none)
-    _ -> Debug.log "Command parsing failed" (Conn model, Cmd.none)
+        x -> Debug.todo <| "Unexpected command: " ++ Debug.toString x
+    x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
 
 fromData : API.RoomData -> GameRec
 fromData data = 
@@ -191,7 +191,7 @@ fromData data =
   , draft = ""
   , messages = []
   , minRaise = 0
-  , playerNames = L.map .pUserID data.rdPlayers
+  , players = data.rdPlayers
   , roomId = 0
   }
 
@@ -268,7 +268,7 @@ chatView model = column
       , padding 10
       , B.width 1
       ]
-      (List.map text model.playerNames)
+      (List.map (text << .pUserID) model.players)
   , column 
       [ width fill
       , height fill

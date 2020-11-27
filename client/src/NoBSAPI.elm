@@ -50,6 +50,7 @@ jsonEncClientMsg  val =
 type ServerMsg  =
     SRoomData RoomData
     | SJoin Player
+    | SSay Player String
     | SLeave String
     | SSit String Int
     | SRaise String Int
@@ -63,6 +64,7 @@ jsonDecServerMsg =
     let jsonDecDictServerMsg = Dict.fromList
             [ ("SRoomData", Json.Decode.lazy (\_ -> Json.Decode.map SRoomData (jsonDecRoomData)))
             , ("SJoin", Json.Decode.lazy (\_ -> Json.Decode.map SJoin (jsonDecPlayer)))
+            , ("SSay", Json.Decode.lazy (\_ -> Json.Decode.map2 SSay (Json.Decode.index 0 (jsonDecPlayer)) (Json.Decode.index 1 (Json.Decode.string))))
             , ("SLeave", Json.Decode.lazy (\_ -> Json.Decode.map SLeave (Json.Decode.string)))
             , ("SSit", Json.Decode.lazy (\_ -> Json.Decode.map2 SSit (Json.Decode.index 0 (Json.Decode.string)) (Json.Decode.index 1 (Json.Decode.int))))
             , ("SRaise", Json.Decode.lazy (\_ -> Json.Decode.map2 SRaise (Json.Decode.index 0 (Json.Decode.string)) (Json.Decode.index 1 (Json.Decode.int))))
@@ -78,6 +80,7 @@ jsonEncServerMsg  val =
     let keyval v = case v of
                     SRoomData v1 -> ("SRoomData", encodeValue (jsonEncRoomData v1))
                     SJoin v1 -> ("SJoin", encodeValue (jsonEncPlayer v1))
+                    SSay v1 v2 -> ("SSay", encodeValue (Json.Encode.list identity [jsonEncPlayer v1, Json.Encode.string v2]))
                     SLeave v1 -> ("SLeave", encodeValue (Json.Encode.string v1))
                     SSit v1 v2 -> ("SSit", encodeValue (Json.Encode.list identity [Json.Encode.string v1, Json.Encode.int v2]))
                     SRaise v1 v2 -> ("SRaise", encodeValue (Json.Encode.list identity [Json.Encode.string v1, Json.Encode.int v2]))

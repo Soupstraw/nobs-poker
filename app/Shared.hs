@@ -20,6 +20,7 @@ deriveBoth defaultOptions ''Player
 data RoomData = RoomData
   { rdPlayers :: [Player]
   }
+  deriving (Show)
 deriveBoth defaultOptions ''RoomData
 
 data ClientMsg
@@ -37,6 +38,7 @@ deriveBoth defaultOptions ''ClientMsg
 data ServerMsg
   = SRoomData RoomData
   | SJoin Player
+  | SSay Player Text
   | SLeave Text
   | SSit Text Int
   | SRaise Text Int
@@ -44,6 +46,7 @@ data ServerMsg
   | SFold Text
   | SDrawCards
   | SRoomCreated Text
+  deriving (Show)
 deriveBoth defaultOptions ''ServerMsg
 
 generateModule :: Text
