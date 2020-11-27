@@ -94,15 +94,22 @@ jsonEncServerMsg  val =
 
 type alias Player  =
    { pUserID: String
+   , pUserName: String
    }
 
 jsonDecPlayer : Json.Decode.Decoder ( Player )
 jsonDecPlayer =
-   Json.Decode.succeed (\ppUserID -> {pUserID = ppUserID}) |> custom (Json.Decode.string)
+   Json.Decode.succeed (\ppUserID ppUserName -> {pUserID = ppUserID, pUserName = ppUserName})
+   |> required "pUserID" (Json.Decode.string)
+   |> required "pUserName" (Json.Decode.string)
 
 jsonEncPlayer : Player -> Value
 jsonEncPlayer  val =
-   Json.Encode.string val.pUserID
+   Json.Encode.object
+   [ ("pUserID", Json.Encode.string val.pUserID)
+   , ("pUserName", Json.Encode.string val.pUserName)
+   ]
+
 
 
 type alias RoomData  =

@@ -35,7 +35,7 @@ instance Show Unique where
   show (Unique x) = toString x
 
 instance Random Unique where
-  random g = (Unique $ show (x :: Word64), g')
+  random g = (Unique $ show (x :: Int), g')
     where (x, g') = random g
 
 data User = User
@@ -356,7 +356,11 @@ getPlayer
      )
   => Unique 
   -> m Player
-getPlayer userId = return . Player $ show userId
+getPlayer userId = 
+  do
+    player <- getUser userId
+    pName <- readMVar $ player ^. userName
+    return $ Player (show userId) pName
 
 sendMessage 
   :: ( MonadReader NoBSState m

@@ -40,8 +40,6 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-- git: https://github.com/Soupstraw/elm-websocket
-  commit: 37cac57d1a4255121789b4c7d3c198923c36aa30
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

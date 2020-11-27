@@ -33,7 +33,6 @@ dependencies:
 - lens
 - MonadRandom
 - mtl
-- opaleye
 - random-shuffle
 - relude
 - servant

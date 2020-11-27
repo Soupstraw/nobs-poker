@@ -115,12 +115,12 @@ handleGameMsg model msg =
       )
     Recv m   -> 
       case decodeString API.jsonDecServerMsg m of
-        Ok (API.SJoin userId) ->
-          ( Game { model | players = model.players ++ [userId] }
+        Ok (API.SJoin user) ->
+          ( Game { model | players = model.players ++ [user] }
           , Cmd.none
           )
         Ok (API.SSay user sayMsg) ->
-          ( Game <| addMessage model <| user.pUserID ++ ": " ++ sayMsg
+          ( Game <| addMessage model <| user.pUserName ++ ": " ++ sayMsg
           , Cmd.none
           )
         x -> Debug.todo <| "Unexpected command: " ++ Debug.toString x
@@ -268,7 +268,7 @@ chatView model = column
       , padding 10
       , B.width 1
       ]
-      (List.map (text << .pUserID) model.players)
+      (List.map (text << .pUserName) model.players)
   , column 
       [ width fill
       , height fill

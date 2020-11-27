@@ -12,7 +12,8 @@ import Elm.Derive
 import Elm.Module
 
 data Player = Player
-  { pUserID :: Text
+  { pUserID   :: Text
+  , pUserName :: Text
   }
   deriving (Show)
 deriveBoth defaultOptions ''Player
