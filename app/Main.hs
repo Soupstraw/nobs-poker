@@ -35,7 +35,7 @@ instance Show Unique where
   show (Unique x) = toString x
 
 instance Random Unique where
-  random g = (Unique $ show (x :: Int), g')
+  random g = (Unique $ show (x :: Word16), g')
     where (x, g') = random g
 
 data User = User

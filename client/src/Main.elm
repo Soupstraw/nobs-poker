@@ -1,14 +1,17 @@
 port module Main exposing (..)
 
 import Browser exposing (..)
-import Browser.Navigation exposing (Key)
+import Browser.Events exposing (..)
+import Browser.Navigation exposing (..)
 
 import Element exposing (..)
 import Element.Border as B
 import Element.Font as F
 import Element.Input as I
 
-import Json.Decode exposing (decodeString)
+import Html.Events as HE
+
+import Json.Decode exposing (..)
 import Json.Encode exposing (encode)
 
 import List as L
@@ -47,14 +50,15 @@ type alias GameRec =
   , draft    : String
   , roomId   : Int
   , players  : List API.Player
+  , key      : Key
   }
 
 type alias MenuRec =
-  {
+  { key : Key
   }
 
 type alias ConnRec =
-  {
+  { key : Key
   }
 
 type Model 
@@ -75,10 +79,11 @@ type Msg
   | Connected String
   | Sit Int
   | CreateRoom
+  | ChatKeyDown
 
 init : a -> Url -> Key -> (Model, Cmd msg)
 init _ url key =
-  ( Conn {} 
+  ( Conn { key = key } 
   , Cmd.none)
 
 document : Model -> Document Msg
@@ -152,7 +157,7 @@ handleMenuMsg : MenuRec -> Msg -> (Model, Cmd Msg)
 handleMenuMsg model msg =
   case msg of
     CreateRoom ->
-      ( Conn {}
+      ( Conn { key = model.key }
       , sendMessage API.CCreateRoom
       )
     x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
@@ -168,7 +173,7 @@ handleConnMsg model msg =
             , sendMessage <| API.CJoin roomId
             )
           Nothing     -> 
-            ( Menu {}
+            ( Menu { key = model.key }
             , Cmd.none
             )
       Nothing  -> (Conn model, Cmd.none)
@@ -176,23 +181,28 @@ handleConnMsg model msg =
       case decodeString API.jsonDecServerMsg m of
         Ok (API.SRoomCreated roomId) -> Debug.log "Got room created confirmation"
           ( Conn model
-          , sendMessage <| API.CJoin roomId
+          , Cmd.batch
+              [ sendMessage <| API.CJoin roomId
+              , pushUrl model.key <| "http://localhost:8080/room/" ++ roomId
+              ]
           )
         Ok (API.SRoomData info) -> Debug.log "Got room info"
-          ( Game <| fromData info
+          ( Game <| fromData info model.key
           , Cmd.none
           )
         x -> Debug.todo <| "Unexpected command: " ++ Debug.toString x
+    UrlChange _ -> (Conn model, Cmd.none)
     x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
 
-fromData : API.RoomData -> GameRec
-fromData data = 
+fromData : API.RoomData -> Key -> GameRec
+fromData data key = 
   { raiseAmt = 0
   , draft = ""
   , messages = []
   , minRaise = 0
   , players = data.rdPlayers
   , roomId = 0
+  , key = key
   }
 
 subscriptions : Model -> Sub Msg
@@ -277,18 +287,37 @@ chatView model = column
       ] 
       (msgElems model)
   , row [alignBottom]
-      [ I.text [] 
+      [ I.text 
+          [ onEnter <| Send (API.CSay model.draft)
+          ] 
           { label = I.labelHidden "Send a message.."
           , onChange = Draft
           , placeholder = Just (I.placeholder [] <| text "Send a message..")
           , text = model.draft
           }
-      , I.button [alignRight]
+      , I.button 
+          [ alignRight
+          ]
           { label = text "Send"
           , onPress = Just <| Send (API.CSay model.draft)
           }
       ]
   ]
+
+onEnter : msg -> Attribute msg
+onEnter msg =
+    Element.htmlAttribute
+        (HE.on "keypress"
+            (field "key" string
+                |> andThen
+                    (\key ->
+                        if key == "Enter" then
+                            succeed msg
+                        else
+                            fail "Not the enter key"
+                    )
+            )
+        )
 
 msgElems : GameRec -> List (Element Msg)
 msgElems model = L.map text model.messages
