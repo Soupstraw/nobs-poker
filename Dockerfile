@@ -20,4 +20,10 @@ COPY app app
 COPY test test
 COPY package.yaml stack.yaml README.md ChangeLog.md ./
 RUN stack install
-CMD nobs-server
+
+FROM alpine:latest
+WORKDIR /root
+RUN apk add libc6-compat gmp
+COPY --from=0 /root/.local/bin/nobs-server .
+COPY --from=0 /opt/nobs-poker/client client
+CMD ./nobs-server
