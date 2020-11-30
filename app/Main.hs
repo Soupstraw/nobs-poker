@@ -8,8 +8,8 @@ import Relude.Extra.Map
 
 import Control.Concurrent.MVar (isEmptyMVar, modifyMVar_)
 import Control.Exception (bracket)
-import Control.Monad.Random
 import Control.Lens hiding (Fold, (??))
+import Control.Monad.Random
 
 import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
@@ -24,24 +24,14 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-import qualified Text.Show as T
-
 import Shared
 
-newtype Unique = Unique Text
-  deriving (Eq, Ord)
-
-instance Show Unique where
-  show (Unique x) = toString x
-
-instance Random Unique where
-  random g = (Unique $ show (x :: Word16), g')
-    where (x, g') = random g
-
 data User = User
-  { _userName :: MVar Text
-  , _userConn :: MVar Connection
-  , _userRoom :: MVar (Maybe Unique)
+  { _userName  :: MVar Text
+  , _userConn  :: MVar Connection
+  , _userRoom  :: MVar (Maybe Unique)
+  , _userMoney :: Int
+  , _userSeat  :: MVar (Maybe Int)
   }
 makeLenses 'User
 
@@ -120,7 +110,8 @@ addUser conn =
         mvarConn <- newMVar conn
         mvarName <- newMVar pname
         mvarRoom <- newMVar Nothing
-        let newUser = User mvarName mvarConn mvarRoom
+        mvarSeatIdx <- newMVar Nothing
+        let newUser = User mvarName mvarConn mvarRoom 1000 mvarSeatIdx
         mdf <- modifyIORef <$> view nsServerState
         mdf $ ssUserPool %~ insert uid newUser
         $(logTM) DebugS . ls $ "Added player " <> pname
@@ -160,7 +151,7 @@ serveClient uid =
     let mconn = st ^? ssUserPool . at uid . _Just . userConn
     case mconn of
       Just var -> do
-        whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+        notifyEmpty var
         conn <- readMVar var
         msg <- liftIO $ receiveData conn
         handleMsg uid msg
@@ -201,7 +192,7 @@ doCommand userId (CJoin r) =
       Just room -> 
         do
           let var = room ^. roomUsers
-          whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+          notifyEmpty var
           usrs <- liftIO $ readMVar var
           res <- if userId `elem` usrs
             then do
@@ -228,20 +219,47 @@ doCommand userId CCreateRoom =
           modifyServerState $ ssRoomPool %~ insert roomId (Room userList)
           $(logTM) InfoS $ "Created room " <> show roomId
           conn <- getConnection userId
-          sendMessage conn (SRoomCreated $ show roomId)
+          sendMessage conn (SRoomCreated roomId)
 doCommand userId (CSay msg) = 
   do
     usr <- getUser userId
     let var = usr ^. userRoom
-    whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+    notifyEmpty var
     mbyRoomId <- readMVar var
     case mbyRoomId of
       Just roomId ->
         do
-          player <- getPlayer userId
-          sendRoomMessage roomId $ SSay player msg
+          sendRoomMessage roomId $ SSay userId msg
       Nothing ->
         $(logTM) ErrorS "User is not in a room"
+doCommand userId (CSit seatIdx) =
+  do
+    user <- getUser userId
+    curSeat <- readMVar $ user ^. userSeat
+
+    -- Check whether the user is already sitting at the table
+    if isJust curSeat
+      then $(logTM) ErrorS "User is already sitting at the table"
+      else do
+        mbyRoomId <- readMVar $ user ^. userRoom
+        -- Check whether the user is in a room
+        case mbyRoomId of
+          Just roomId ->
+            do
+              room <- getRoom roomId
+              others <- readMVar $ room ^. roomUsers
+              -- Check whether the seat is taken
+              taken <- anyM ?? others $ \u -> do
+                o <- getUser u
+                seat <- readMVar $ o^. userSeat
+                return $ seat == Just seatIdx
+              if taken
+                then $(logTM) ErrorS "Seat is already taken"
+                else 
+                  do
+                    liftIO . modifyMVar_ (user ^. userSeat) . const . return $ Just seatIdx
+                    sendRoomMessage roomId $ SSit userId seatIdx
+          Nothing -> $(logTM) ErrorS "User is not in a room"
 doCommand _ c = $(logTM) ErrorS $ "Cannot handle command " <> show c <> " yet."
 
 addUserToRoom
@@ -263,18 +281,18 @@ addUserToRoom userId roomId =
     liftIO . modifyMVar_ (usr ^. userRoom) . const . return $ Just roomId
 
     -- Update room players list serverside
-    whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+    notifyEmpty var
     void . liftIO . modifyMVar_ var $ return . cons userId
 
     -- Tell everyone in the room that the player joined
     player <- getPlayer userId
     sendRoomMessage roomId $ SJoin player
 
-whenEmpty :: MonadIO m => MVar a -> m () -> m ()
-whenEmpty var f =
+notifyEmpty :: (MonadIO m, KatipContext m) => MVar a -> m ()
+notifyEmpty var =
   do
     cond <- liftIO $ isEmptyMVar var
-    when cond f
+    when cond $ $(logTM) DebugS "Blocking on MVar"
 
 sendRoomMessage 
   :: ( MonadIO m
@@ -289,7 +307,7 @@ sendRoomMessage roomId msg =
   do
     room <- getRoom roomId
     let var = room ^. roomUsers
-    whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+    notifyEmpty var
     usrs <- readMVar var
     forM_ usrs $ \u -> do
       conn <- getConnection u
@@ -305,7 +323,7 @@ roomData
 roomData room = 
   do
     let var = room ^. roomUsers
-    whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+    notifyEmpty var
     userIds <- readMVar var
     players <- traverse getPlayer userIds
     return $ RoomData players
@@ -347,7 +365,7 @@ getConnection userId =
   do
     usr <- getUser userId
     let var = usr ^. userConn
-    whenEmpty var $ $(logTM) DebugS "Blocking on MVar"
+    notifyEmpty var
     readMVar var
 
 getPlayer
@@ -360,7 +378,9 @@ getPlayer userId =
   do
     player <- getUser userId
     pName <- readMVar $ player ^. userName
-    return $ Player (show userId) pName
+    let money = player ^. userMoney
+    seat <- readMVar $ player ^. userSeat
+    return $ Player userId pName money seat
 
 sendMessage 
   :: ( MonadReader NoBSState m

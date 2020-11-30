@@ -11,10 +11,11 @@ import Element.Input as I
 
 import Html.Events as HE
 
-import Json.Decode exposing (..)
-import Json.Encode exposing (encode)
+import Json.Decode as JD
+import Json.Encode as JE
 
 import List as L
+import List.Extra exposing (..)
 
 import Maybe.Extra exposing (..)
 
@@ -119,15 +120,28 @@ handleGameMsg model msg =
       , sendMessage API.CFold
       )
     Recv m   -> 
-      case decodeString API.jsonDecServerMsg m of
+      case JD.decodeString API.jsonDecServerMsg m of
         Ok (API.SJoin user) ->
           ( Game { model | players = model.players ++ [user] }
           , Cmd.none
           )
-        Ok (API.SSay user sayMsg) ->
-          ( Game <| addMessage model <| user.pUserName ++ ": " ++ sayMsg
-          , Cmd.none
-          )
+        Ok (API.SSay userId sayMsg) ->
+          case getUser model userId of
+            Just user ->
+              ( Game <| addMessage model <| user.pUserName ++ ": " ++ sayMsg
+              , Cmd.none
+              )
+            Nothing ->
+              ( Debug.log "Got a message from a non-existent player" <| Game model
+              , Cmd.none
+              )
+        Ok (API.SSit userId seatIdx) ->
+          let
+              f p = { p | pSeat = Just seatIdx }
+          in
+            ( Game { model | players = updateIf (\x -> x.pUserID == userId) f model.players}
+            , Cmd.none
+            )
         x -> Debug.todo <| "Unexpected command: " ++ Debug.toString x
     Send x   -> 
       ( Game { model | draft = ""}
@@ -152,6 +166,9 @@ handleGameMsg model msg =
       , sendMessage <| API.CSit <| x
       )
     x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
+
+getUser : GameRec -> API.Unique -> Maybe API.Player
+getUser model userId = find ((==) userId << .pUserID) model.players
 
 handleMenuMsg : MenuRec -> Msg -> (Model, Cmd Msg)
 handleMenuMsg model msg =
@@ -178,7 +195,7 @@ handleConnMsg model msg =
             )
       Nothing  -> (Conn model, Cmd.none)
     Recv m ->
-      case decodeString API.jsonDecServerMsg m of
+      case JD.decodeString API.jsonDecServerMsg m of
         Ok (API.SRoomCreated roomId) -> Debug.log "Got room created confirmation"
           ( Conn model
           , Cmd.batch
@@ -308,13 +325,13 @@ onEnter : msg -> Attribute msg
 onEnter msg =
     Element.htmlAttribute
         (HE.on "keypress"
-            (field "key" string
-                |> andThen
+            (JD.field "key" JD.string
+                |> JD.andThen
                     (\key ->
                         if key == "Enter" then
-                            succeed msg
+                            JD.succeed msg
                         else
-                            fail "Not the enter key"
+                            JD.fail "Not the enter key"
                     )
             )
         )
@@ -371,16 +388,28 @@ buttonStyle =
 
 tablePlayer : Int -> GameRec -> Element Msg
 tablePlayer idx model =
-  let ang = 2*pi*(toFloat idx)/seatCount
-  in I.button 
+  let 
+    ang = 2*pi*(toFloat idx)/seatCount
+    style = 
        [ moveRight (500 * (sin ang))
        , moveDown (250 * (cos ang))
        , centerX
        , centerY
        ]
-       { onPress = Just <| Sit idx
-       , label = text "Sit"
-       }
+  in 
+    case find (\x -> x.pSeat == Just idx) model.players of
+      Just player ->
+        column
+          style
+          [ text <| player.pUserName
+          , text <| "$" ++ String.fromInt player.pMoney
+          ]
+      _ -> 
+        I.button 
+          style
+          { onPress = Just <| Sit idx
+          , label = text "Sit"
+          }
 
 playerStyle : List (Attribute msg)
 playerStyle =
@@ -391,7 +420,7 @@ playerStyle =
 sendMessage : API.ClientMsg -> Cmd Msg
 sendMessage msg =
   port_sendMessage 
-  <| encode 0
+  <| JE.encode 0
   <| API.jsonEncClientMsg msg
 
 addMessage : GameRec -> String -> GameRec

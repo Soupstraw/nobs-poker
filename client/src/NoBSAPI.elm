@@ -50,28 +50,28 @@ jsonEncClientMsg  val =
 type ServerMsg  =
     SRoomData RoomData
     | SJoin Player
-    | SSay Player String
-    | SLeave String
-    | SSit String Int
-    | SRaise String Int
-    | SCall String
-    | SFold String
+    | SSay Unique String
+    | SLeave Unique
+    | SSit Unique Int
+    | SRaise Unique Int
+    | SCall Unique
+    | SFold Unique
     | SDrawCards 
-    | SRoomCreated String
+    | SRoomCreated Unique
 
 jsonDecServerMsg : Json.Decode.Decoder ( ServerMsg )
 jsonDecServerMsg =
     let jsonDecDictServerMsg = Dict.fromList
             [ ("SRoomData", Json.Decode.lazy (\_ -> Json.Decode.map SRoomData (jsonDecRoomData)))
             , ("SJoin", Json.Decode.lazy (\_ -> Json.Decode.map SJoin (jsonDecPlayer)))
-            , ("SSay", Json.Decode.lazy (\_ -> Json.Decode.map2 SSay (Json.Decode.index 0 (jsonDecPlayer)) (Json.Decode.index 1 (Json.Decode.string))))
-            , ("SLeave", Json.Decode.lazy (\_ -> Json.Decode.map SLeave (Json.Decode.string)))
-            , ("SSit", Json.Decode.lazy (\_ -> Json.Decode.map2 SSit (Json.Decode.index 0 (Json.Decode.string)) (Json.Decode.index 1 (Json.Decode.int))))
-            , ("SRaise", Json.Decode.lazy (\_ -> Json.Decode.map2 SRaise (Json.Decode.index 0 (Json.Decode.string)) (Json.Decode.index 1 (Json.Decode.int))))
-            , ("SCall", Json.Decode.lazy (\_ -> Json.Decode.map SCall (Json.Decode.string)))
-            , ("SFold", Json.Decode.lazy (\_ -> Json.Decode.map SFold (Json.Decode.string)))
+            , ("SSay", Json.Decode.lazy (\_ -> Json.Decode.map2 SSay (Json.Decode.index 0 (jsonDecUnique)) (Json.Decode.index 1 (Json.Decode.string))))
+            , ("SLeave", Json.Decode.lazy (\_ -> Json.Decode.map SLeave (jsonDecUnique)))
+            , ("SSit", Json.Decode.lazy (\_ -> Json.Decode.map2 SSit (Json.Decode.index 0 (jsonDecUnique)) (Json.Decode.index 1 (Json.Decode.int))))
+            , ("SRaise", Json.Decode.lazy (\_ -> Json.Decode.map2 SRaise (Json.Decode.index 0 (jsonDecUnique)) (Json.Decode.index 1 (Json.Decode.int))))
+            , ("SCall", Json.Decode.lazy (\_ -> Json.Decode.map SCall (jsonDecUnique)))
+            , ("SFold", Json.Decode.lazy (\_ -> Json.Decode.map SFold (jsonDecUnique)))
             , ("SDrawCards", Json.Decode.lazy (\_ -> Json.Decode.succeed SDrawCards))
-            , ("SRoomCreated", Json.Decode.lazy (\_ -> Json.Decode.map SRoomCreated (Json.Decode.string)))
+            , ("SRoomCreated", Json.Decode.lazy (\_ -> Json.Decode.map SRoomCreated (jsonDecUnique)))
             ]
     in  decodeSumObjectWithSingleField  "ServerMsg" jsonDecDictServerMsg
 
@@ -80,34 +80,40 @@ jsonEncServerMsg  val =
     let keyval v = case v of
                     SRoomData v1 -> ("SRoomData", encodeValue (jsonEncRoomData v1))
                     SJoin v1 -> ("SJoin", encodeValue (jsonEncPlayer v1))
-                    SSay v1 v2 -> ("SSay", encodeValue (Json.Encode.list identity [jsonEncPlayer v1, Json.Encode.string v2]))
-                    SLeave v1 -> ("SLeave", encodeValue (Json.Encode.string v1))
-                    SSit v1 v2 -> ("SSit", encodeValue (Json.Encode.list identity [Json.Encode.string v1, Json.Encode.int v2]))
-                    SRaise v1 v2 -> ("SRaise", encodeValue (Json.Encode.list identity [Json.Encode.string v1, Json.Encode.int v2]))
-                    SCall v1 -> ("SCall", encodeValue (Json.Encode.string v1))
-                    SFold v1 -> ("SFold", encodeValue (Json.Encode.string v1))
+                    SSay v1 v2 -> ("SSay", encodeValue (Json.Encode.list identity [jsonEncUnique v1, Json.Encode.string v2]))
+                    SLeave v1 -> ("SLeave", encodeValue (jsonEncUnique v1))
+                    SSit v1 v2 -> ("SSit", encodeValue (Json.Encode.list identity [jsonEncUnique v1, Json.Encode.int v2]))
+                    SRaise v1 v2 -> ("SRaise", encodeValue (Json.Encode.list identity [jsonEncUnique v1, Json.Encode.int v2]))
+                    SCall v1 -> ("SCall", encodeValue (jsonEncUnique v1))
+                    SFold v1 -> ("SFold", encodeValue (jsonEncUnique v1))
                     SDrawCards  -> ("SDrawCards", encodeValue (Json.Encode.list identity []))
-                    SRoomCreated v1 -> ("SRoomCreated", encodeValue (Json.Encode.string v1))
+                    SRoomCreated v1 -> ("SRoomCreated", encodeValue (jsonEncUnique v1))
     in encodeSumObjectWithSingleField keyval val
 
 
 
 type alias Player  =
-   { pUserID: String
+   { pUserID: Unique
    , pUserName: String
+   , pMoney: Int
+   , pSeat: (Maybe Int)
    }
 
 jsonDecPlayer : Json.Decode.Decoder ( Player )
 jsonDecPlayer =
-   Json.Decode.succeed (\ppUserID ppUserName -> {pUserID = ppUserID, pUserName = ppUserName})
-   |> required "pUserID" (Json.Decode.string)
+   Json.Decode.succeed (\ppUserID ppUserName ppMoney ppSeat -> {pUserID = ppUserID, pUserName = ppUserName, pMoney = ppMoney, pSeat = ppSeat})
+   |> required "pUserID" (jsonDecUnique)
    |> required "pUserName" (Json.Decode.string)
+   |> required "pMoney" (Json.Decode.int)
+   |> fnullable "pSeat" (Json.Decode.int)
 
 jsonEncPlayer : Player -> Value
 jsonEncPlayer  val =
    Json.Encode.object
-   [ ("pUserID", Json.Encode.string val.pUserID)
+   [ ("pUserID", jsonEncUnique val.pUserID)
    , ("pUserName", Json.Encode.string val.pUserName)
+   , ("pMoney", Json.Encode.int val.pMoney)
+   , ("pSeat", (maybeEncode (Json.Encode.int)) val.pSeat)
    ]
 
 
@@ -123,3 +129,14 @@ jsonDecRoomData =
 jsonEncRoomData : RoomData -> Value
 jsonEncRoomData  val =
    (Json.Encode.list jsonEncPlayer) val.rdPlayers
+
+
+type alias Unique  = String
+
+jsonDecUnique : Json.Decode.Decoder ( Unique )
+jsonDecUnique =
+    Json.Decode.string
+
+jsonEncUnique : Unique -> Value
+jsonEncUnique  val = Json.Encode.string val
+
