@@ -154,7 +154,7 @@ serveSocket conn =
     catch (serveClient uid) $ \ex -> do
       case ex of
         CloseRequest{} -> $(logTM) InfoS "Connection closed!"
-        _ -> undefined
+        x -> $(logTM) WarningS $ "Exception: " <> show x
 
 serveClient 
   :: ( MonadIO m
