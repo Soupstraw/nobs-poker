@@ -8,6 +8,7 @@ import Relude.Extra.Map
 
 import Control.Concurrent.MVar (isEmptyMVar, modifyMVar_)
 import Control.Exception (bracket)
+import Control.Monad.Catch (MonadThrow, MonadCatch, catch, throwM)
 import Control.Lens hiding (Fold, (??))
 import Control.Monad.Random
 
@@ -78,6 +79,20 @@ instance KatipContext NoBS where
   getKatipNamespace = view nsLogNamespace
   localKatipNamespace f (NoBS m) = NoBS $ local (over nsLogNamespace f) m
 
+instance MonadThrow NoBS where
+  throwM = liftIO . throwM
+
+instance MonadCatch NoBS where
+  catch action handler =
+    do
+      st <- ask
+      res <- liftIO . catch (runHandler $ runNoBS st action) $ \ex ->
+        do
+          runHandler . runNoBS st $ handler ex
+      case res of
+        Left ex -> throwM ex
+        Right x -> return x
+
 runNoBS :: NoBSState -> NoBS a -> Handler a
 runNoBS s m = 
   do
@@ -128,6 +143,7 @@ serveSocket
      , MonadReader NoBSState m
      , MonadRandom m
      , KatipContext m
+     , MonadCatch m
      )
   => Connection 
   -> m ()
@@ -135,7 +151,10 @@ serveSocket conn =
   do
     $(logTM) InfoS "New connection!"
     uid <- addUser conn
-    serveClient uid
+    catch (serveClient uid) $ \ex -> do
+      case ex of
+        CloseRequest{} -> $(logTM) InfoS "Connection closed!"
+        _ -> undefined
 
 serveClient 
   :: ( MonadIO m
@@ -414,6 +433,7 @@ nobsServer
      , MonadReader NoBSState m
      , MonadRandom m
      , KatipContext m
+     , MonadCatch m
      )
   => ServerT NoBSAPI m
 nobsServer = serveSocket

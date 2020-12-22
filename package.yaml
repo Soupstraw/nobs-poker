@@ -28,6 +28,7 @@ dependencies:
 - concurrency
 - containers
 - elm-bridge
+- exceptions
 - formatting
 - katip
 - lens
