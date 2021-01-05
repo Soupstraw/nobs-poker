@@ -27,17 +27,20 @@ import Servant.API.WebSocket
 
 import Shared
 
+import Game
+
 data User = User
   { _userName  :: MVar Text
   , _userConn  :: MVar Connection
-  , _userRoom  :: MVar (Maybe Unique)
   , _userMoney :: Int
+  , _userRoom  :: MVar (Maybe Unique)
   , _userSeat  :: MVar (Maybe Int)
   }
 makeLenses 'User
 
 data Room = Room
   { _roomUsers :: MVar [Unique]
+  , _roomGame  :: GameState
   }
 makeLenses 'Room
 
@@ -126,11 +129,32 @@ addUser conn =
         mvarName <- newMVar pname
         mvarRoom <- newMVar Nothing
         mvarSeatIdx <- newMVar Nothing
-        let newUser = User mvarName mvarConn mvarRoom 1000 mvarSeatIdx
+        let newUser = User mvarName mvarConn 0 mvarRoom mvarSeatIdx
         mdf <- modifyIORef <$> view nsServerState
         mdf $ ssUserPool %~ insert uid newUser
         $(logTM) DebugS . ls $ "Added player " <> pname
         return uid
+
+removeUser 
+  :: ( MonadReader NoBSState m
+     , MonadIO m
+     , MonadRandom m
+     , KatipContext m
+     ) 
+  => Unique 
+  -> m ()
+removeUser uid =
+  do
+    usr <- getUser uid
+    
+    -- Tell everyone in the room that the player left
+    mbyRoomId <- readMVar $ usr ^. userRoom
+    whenJust mbyRoomId $ sendRoomMessage ?? SLeave uid
+
+    -- Remove the player from the user pool
+    mdf <- modifyIORef <$> view nsServerState
+    mdf $ ssUserPool %~ delete uid
+    $(logTM) InfoS $ "Player " <> show uid <> " left"
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
@@ -155,6 +179,7 @@ serveSocket conn =
       case ex of
         CloseRequest{} -> $(logTM) InfoS "Connection closed!"
         x -> $(logTM) WarningS $ "Exception: " <> show x
+      removeUser uid
 
 serveClient 
   :: ( MonadIO m
@@ -235,7 +260,7 @@ doCommand userId CCreateRoom =
       Nothing -> 
         do
           userList <- newMVar []
-          modifyServerState $ ssRoomPool %~ insert roomId (Room userList)
+          modifyServerState $ ssRoomPool %~ insert roomId (Room userList defaultState)
           $(logTM) InfoS $ "Created room " <> show roomId
           conn <- getConnection userId
           sendMessage conn (SRoomCreated roomId)
