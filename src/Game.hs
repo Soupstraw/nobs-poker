@@ -6,6 +6,7 @@ module Game
   ( GameState
   , Player
   , defaultState
+  , setupRound, sit
   , raise, Game.fold, call
   ) where
 
@@ -25,6 +26,7 @@ data GameException
   = InvalidSeatIndex
   | SeatOccupied
   | NoPlayers
+  | NotEnoughMoney
   deriving (Show, Exception)
 
 data Rank
@@ -54,6 +56,7 @@ data Card = Card Rank Suit
 
 data Player = Player
   { _pMoney   :: Int
+  , _pBet     :: Int
   , _pPlaying :: Bool
   }
   deriving (Eq)
@@ -67,8 +70,6 @@ data GameState = GameState
   , _gsSmallBlind :: Int
   , _gsBigBlind   :: Int
   }
-
-type Holdem = ExceptT GameException (StateT GameState IO)
 
 makeLenses ''Player
 makeLenses ''GameState
@@ -130,6 +131,10 @@ raise
   -> m ()
 raise x =
   do
+    player <- whenNothingM (use currentPlayer) $ throwError InvalidSeatIndex
+    when (player ^. pMoney < x) $ throwError NotEnoughMoney
+    currentPlayer . _Just . pMoney -= x
+    currentPlayer . _Just . pBet   += x
     passTurn
 
 call
@@ -161,7 +166,7 @@ passTurn =
     seats <- use gsSeats
     gsTurn += 1
     gsTurn %= (`mod` V.length seats)
-    void currentPlayer `catchError` (\InvalidSeatIndex -> passTurn)
+    unlessM (has currentPlayer <$> get) passTurn
 
 passDealer
   :: ( MonadState GameState m
@@ -174,33 +179,21 @@ passDealer =
     seats <- use gsSeats
     gsDealer += 1
     gsDealer %= (`mod` V.length seats)
-    void currentDealer `catchError` (\InvalidSeatIndex -> passDealer)
+    unlessM (has currentDealer <$> get) passTurn
 
-currentPlayer 
-  :: ( MonadState GameState m
-     , MonadError GameException m
-     ) 
-  => m Player
-currentPlayer = 
-  do
-    seats <- use gsSeats
-    turn <- use gsTurn
-    case seats V.! turn of
-      Just x  -> return x
-      Nothing -> throwError InvalidSeatIndex
+playerByIndex :: (GameState -> Int) -> Lens' GameState (Maybe Player)
+playerByIndex idx = lens getter setter
+  where
+    getter :: GameState -> Maybe Player
+    getter gs = gs ^? gsSeats . ix (idx gs) . _Just
+    setter :: GameState -> Maybe Player -> GameState
+    setter gs y = gs & gsSeats . ix (idx gs) .~ y
 
-currentDealer
-  :: ( MonadState GameState m
-     , MonadError GameException m
-     ) 
-  => m Player
-currentDealer =
-  do
-    seats <- use gsSeats
-    dealer <- use gsDealer
-    case seats V.! dealer of
-      Just x  -> return x
-      Nothing -> throwError InvalidSeatIndex
+currentPlayer :: Lens' GameState (Maybe Player)
+currentPlayer = playerByIndex $ view gsTurn
+
+currentDealer :: Lens' GameState (Maybe Player)
+currentDealer = playerByIndex $ view gsDealer
 
 playersPlaying :: MonadState GameState m => m Bool
 playersPlaying = 
