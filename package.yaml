@@ -27,6 +27,7 @@ dependencies:
 - bytestring
 - concurrency
 - containers
+- data-default
 - elm-bridge
 - exceptions
 - formatting
@@ -34,6 +35,7 @@ dependencies:
 - lens
 - MonadRandom
 - mtl
+- mutable-lens
 - random-shuffle
 - relude
 - servant

@@ -29,7 +29,7 @@ resolver: lts-16.2
 #   - auto-update
 #   - wai
 packages:
-- .
+  - .
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as
 # forks / in-progress versions pinned to a git hash. For example:
@@ -40,6 +40,7 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
+  - mutable-lens-0.4.0.0@sha256:efe692373c2c55489d5fb43fb17119182476cec1acf7271141ad48d41669a4ad,4078
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

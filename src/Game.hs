@@ -5,9 +5,8 @@
 module Game 
   ( GameState
   , Player
-  , defaultState
-  , setupRound, sit
-  , raise, Game.fold, call
+  , Game.fold, call, raise
+  , sit
   ) where
 
 import Relude
@@ -16,8 +15,7 @@ import Control.Lens
 import Control.Monad.Random
 import Control.Monad.Except
 
-import Control.Exception
-
+import Data.Default
 import Data.Vector as V
 
 import System.Random.Shuffle
@@ -55,51 +53,56 @@ data Suit
 data Card = Card Rank Suit
 
 data Player = Player
-  { _pMoney   :: Int
-  , _pBet     :: Int
-  , _pPlaying :: Bool
+  { _pMoney :: Int
+  , _pBet   :: Int
+  , _pState :: PlayerState
   }
   deriving (Eq)
+
+data PlayerState
+  = Playing
+  | Checked
+  | Folded
+  | Leaving
+  deriving (Eq)
+
+data Table = Table
+  { _tFlop  :: Maybe (Card, Card, Card)
+  , _tTurn  :: Maybe Card
+  , _tRiver :: Maybe Card
+  }
+
+instance Default Table where
+  def = Table Nothing Nothing Nothing
 
 data GameState = GameState
   { _gsSeats      :: Vector (Maybe Player)
   , _gsTurn       :: Int
-  , _gsTable      :: [Card]
+  , _gsTable      :: Table
   , _gsDeck       :: [Card]
   , _gsDealer     :: Int
   , _gsSmallBlind :: Int
   , _gsBigBlind   :: Int
   }
 
-makeLenses ''Player
-makeLenses ''GameState
-
-defaultState :: GameState
-defaultState = GameState
-  { _gsSeats      = V.replicate 10 Nothing
-  , _gsTurn       = 0
-  , _gsTable      = []
-  , _gsDeck       = deck
-  , _gsDealer     = 0
-  , _gsSmallBlind = 1
-  , _gsBigBlind   = 2
-  }
-
 deck :: [Card]
 deck = Card <$> [R2 ..] <*> [Spades ..]
 
-sit 
-  :: (MonadState GameState m) 
-  => Player 
-  -> Int 
-  -> m ()
-sit p i = 
-  do
-    _seats <- use gsSeats
-    when (i >= 0) $ throw InvalidSeatIndex
-    when (i < V.length _seats) $ throw InvalidSeatIndex
-    when (isNothing $ _seats ! i) $ throw SeatOccupied
-    gsSeats %= (// [(i, Just p)])
+instance Default GameState where
+  def = GameState
+          { _gsSeats      = V.replicate 10 Nothing
+          , _gsTurn       = 0
+          , _gsTable      = def
+          , _gsDeck       = deck
+          , _gsDealer     = 0
+          , _gsSmallBlind = 1
+          , _gsBigBlind   = 2
+          }
+
+makePrisms ''PlayerState
+makeLenses ''Player
+makeLenses ''Table
+makeLenses ''GameState
 
 setupRound 
   :: ( MonadState GameState m
@@ -109,6 +112,8 @@ setupRound
   => m ()
 setupRound =
   do
+    -- Remove players that have left and ready everyone else
+    setupPlayers
     -- Move the dealer chip
     passDealer
     dealer <- use gsDealer
@@ -144,6 +149,14 @@ call
   => m ()
 call =
   do
+    player <- whenNothingM (use currentPlayer) $ throwError InvalidSeatIndex
+    mbyMaxBet <- maximumOf (gsSeats . folded . _Just . pBet) <$> get
+    let maxBet = fromMaybe (error "No seats found") mbyMaxBet
+    let playerBet = player ^. pBet
+    let playerMoney = player ^. pMoney
+    let betAmt = min (maxBet - playerBet) playerMoney
+    currentPlayer . _Just . pMoney -= betAmt
+    currentPlayer . _Just . pBet   += betAmt
     passTurn
 
 fold
@@ -153,33 +166,39 @@ fold
   => m ()
 fold =
   do
+    currentPlayer . _Just . pState .= Folded
     passTurn
 
-passTurn 
+passIndex 
+  :: ( MonadState GameState m
+     , MonadError GameException m
+     ) 
+  => Lens' GameState Int -> m ()
+passIndex l =
+  do
+    whenM playersPlaying $ throwError NoPlayers
+    seats <- use gsSeats
+    let idxUp 0 = throwError NoPlayers
+        idxUp i =
+          do
+            l %= (\x -> (x + 1) `mod` V.length seats)
+            idx <- use l
+            unlessM (has (gsSeats . ix idx . _Just) <$> get) . idxUp $ i - 1
+    idxUp $ V.length seats
+
+passTurn
   :: ( MonadState GameState m
      , MonadError GameException m
      ) 
   => m ()
-passTurn =
-  do
-    whenM playersPlaying $ throwError NoPlayers
-    seats <- use gsSeats
-    gsTurn += 1
-    gsTurn %= (`mod` V.length seats)
-    unlessM (has currentPlayer <$> get) passTurn
+passTurn = passIndex gsTurn
 
 passDealer
   :: ( MonadState GameState m
      , MonadError GameException m
      ) 
   => m ()
-passDealer =
-  do
-    whenM playersPlaying $ throwError NoPlayers
-    seats <- use gsSeats
-    gsDealer += 1
-    gsDealer %= (`mod` V.length seats)
-    unlessM (has currentDealer <$> get) passTurn
+passDealer = passIndex gsDealer
 
 playerByIndex :: (GameState -> Int) -> Lens' GameState (Maybe Player)
 playerByIndex idx = lens getter setter
@@ -199,5 +218,27 @@ playersPlaying :: MonadState GameState m => m Bool
 playersPlaying = 
   do
     seats <- use gsSeats
-    return . Relude.or $ seats ^.. folded . _Just . pPlaying
+    return $ has (folded . _Just . pState . _Playing) seats
+
+setupPlayers 
+  :: ( MonadState GameState m
+     )
+  => m ()
+setupPlayers =
+  do
+    -- Remove players that have left
+    gsSeats . traversed . filtered (has $ _Just . pState . _Leaving) .= Nothing
+    -- Ready everyone else
+    gsSeats . traversed . _Just . pState .= Playing
+
+sit
+  :: ( MonadState GameState m
+     , MonadError GameException m
+     )
+  => Player -> Int -> m ()
+sit p i = 
+  do
+    seats <- use gsSeats
+    when (has (ix i . _Just) seats) $ throwError SeatOccupied
+    gsSeats . ix i .= Just p
 

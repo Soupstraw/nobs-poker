@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: mutable-lens-0.4.0.0@sha256:efe692373c2c55489d5fb43fb17119182476cec1acf7271141ad48d41669a4ad,4078
+    pantry-tree:
+      size: 566
+      sha256: f61d20be6396280d998784bfaaaa1392678ed3226a24afd6a9c4386445051a04
+  original:
+    hackage: mutable-lens-0.4.0.0@sha256:efe692373c2c55489d5fb43fb17119182476cec1acf7271141ad48d41669a4ad,4078
 snapshots:
 - completed:
     size: 531674

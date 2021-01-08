@@ -6,14 +6,14 @@ module Main (main) where
 import Relude hiding (ByteString)
 import Relude.Extra.Map
 
-import Control.Concurrent.MVar (isEmptyMVar, modifyMVar_)
 import Control.Exception (bracket)
 import Control.Monad.Catch (MonadThrow, MonadCatch, catch, throwM)
 import Control.Lens hiding (Fold, (??))
 import Control.Monad.Random
 
-import Data.Aeson
+import Data.Aeson hiding ((.=))
 import Data.ByteString.Lazy (ByteString)
+import Data.Default
 import Data.Map ()
 
 import Katip
@@ -25,21 +25,21 @@ import Network.WebSockets
 import Servant
 import Servant.API.WebSocket
 
-import Shared
+import Shared as S
 
 import Game
 
 data User = User
-  { _userName  :: MVar Text
-  , _userConn  :: MVar Connection
+  { _userName  :: Text
+  , _userConn  :: Connection
   , _userMoney :: Int
-  , _userRoom  :: MVar (Maybe Unique)
-  , _userSeat  :: MVar (Maybe Int)
+  , _userRoom  :: Maybe Unique
+  , _userSeat  :: Maybe Int
   }
 makeLenses 'User
 
 data Room = Room
-  { _roomUsers :: MVar [Unique]
+  { _roomUsers :: [Unique]
   , _roomGame  :: GameState
   }
 makeLenses 'Room
@@ -47,15 +47,18 @@ makeLenses 'Room
 data ServerState = ServerState
   { _ssUserPool :: Map Unique User
   , _ssRoomPool :: Map Unique Room
-  }
+  } 
 makeLenses 'ServerState
+
+instance Default ServerState where
+  def = ServerState def def
 
 type NoBSAPI = "socket" :> WebSocket
           :<|> "room" :> Capture "roomId" Text :> Raw
           :<|> Raw
 
 data NoBSState = NoBSState
-  { _nsServerState  :: IORef ServerState
+  { _nsServerState  :: TVar ServerState
   , _nsLogNamespace :: Namespace
   , _nsLogContext   :: LogContexts
   , _nsLogEnv       :: LogEnv
@@ -105,12 +108,10 @@ runNoBS s m =
     let le = s ^. nsLogEnv
     runKatipContextT le ctx ns $ evalRandT (runReaderT (unNoBS m) s) gen
 
-emptyState :: ServerState
-emptyState = ServerState mempty mempty
-
 addUser 
   :: ( MonadRandom m
      , MonadReader NoBSState m
+     , MonadState ServerState m
      , MonadIO m
      , KatipContext m
      )
@@ -118,43 +119,40 @@ addUser
   -> m Unique
 addUser conn = 
   do
-    st <- readIORef =<< view nsServerState
-    let userPool = st ^. ssUserPool
+    userPool <- use ssUserPool
     uid <- getRandom
     if member uid userPool
       then addUser conn
       else do
         let pname = "Player#" <> show uid
-        mvarConn <- newMVar conn
-        mvarName <- newMVar pname
-        mvarRoom <- newMVar Nothing
-        mvarSeatIdx <- newMVar Nothing
-        let newUser = User mvarName mvarConn 0 mvarRoom mvarSeatIdx
-        mdf <- modifyIORef <$> view nsServerState
-        mdf $ ssUserPool %~ insert uid newUser
+        let newUser = User pname conn 0 Nothing Nothing
         $(logTM) DebugS . ls $ "Added player " <> pname
+        modify $ ssUserPool %~ insert uid newUser
         return uid
 
 removeUser 
-  :: ( MonadReader NoBSState m
+  :: ( MonadState ServerState m
      , MonadIO m
      , MonadRandom m
      , KatipContext m
      ) 
   => Unique 
   -> m ()
-removeUser uid =
+removeUser uid = 
   do
-    usr <- getUser uid
+    mbyUsr <- use $ ssUserPool . at uid
     
-    -- Tell everyone in the room that the player left
-    mbyRoomId <- readMVar $ usr ^. userRoom
-    whenJust mbyRoomId $ sendRoomMessage ?? SLeave uid
+    case mbyUsr of
+      Just usr ->
+        do
+          -- Tell everyone in the room that the player left
+          let mbyRoomId = usr ^. userRoom
+          whenJust mbyRoomId $ sendRoomMessage ?? SLeave uid
 
-    -- Remove the player from the user pool
-    mdf <- modifyIORef <$> view nsServerState
-    mdf $ ssUserPool %~ delete uid
-    $(logTM) InfoS $ "Player " <> show uid <> " left"
+          -- Remove the player from the user pool
+          ssUserPool %= delete uid
+          $(logTM) InfoS $ "Player " <> show uid <> " left"
+      Nothing -> $(logTM) ErrorS $ "User not found: " <> show uid
 
 nobsAPI :: Proxy NoBSAPI
 nobsAPI = Proxy
@@ -189,14 +187,13 @@ serveClient
      )
   => Unique 
   -> m ()
-serveClient uid =
+serveClient uid = 
   do
-    st <- readIORef =<< view nsServerState
-    let mconn = st ^? ssUserPool . at uid . _Just . userConn
+    mconn <- atomically $ do
+      st <- readTVar =<< view nsServerState
+      return $ st ^? ssUserPool . at uid . _Just . userConn
     case mconn of
-      Just var -> do
-        notifyEmpty var
-        conn <- readMVar var
+      Just conn -> do
         msg <- liftIO $ receiveData conn
         handleMsg uid msg
         serveClient uid
@@ -230,85 +227,59 @@ doCommand
 doCommand userId (CJoin r) = 
   do
     $(logTM) InfoS "Received a room join request"
-    st <- getServerState
     let roomId = Unique r
-    case st ^. ssRoomPool . at roomId of
+    room' <- use $ ssRoomPool . at roomId
+    case room' of
       Just room -> 
         do
-          let var = room ^. roomUsers
-          notifyEmpty var
-          usrs <- liftIO $ readMVar var
+          let usrs = room ^. roomUsers
           res <- if userId `elem` usrs
             then do
               $(logTM) ErrorS "Player is already in room"
               return usrs
             else do
-              conn <- getConnection userId
+              conn <- use $ ssUserPool . at userId . _Just . userConn
               rd <- roomData room
               sendMessage conn $ SRoomData rd
               addUserToRoom userId roomId
               $(logTM) DebugS "User added to room"
               return $ cons userId usrs
-          void . liftIO $ swapMVar var res
+          ssRoomPool . at roomId . _Just . roomUsers .= res
       Nothing   -> $(logTM) ErrorS $ "Room " <> show roomId <> " does not exist."
 doCommand userId CCreateRoom =
   do
-    st <- getServerState
     roomId <- getRandom
-    case st ^. ssRoomPool . at roomId of
+    room <- use $ ssRoomPool . at roomId
+    case room of
       Just _  -> doCommand userId CCreateRoom
       Nothing -> 
         do
-          userList <- newMVar []
-          modifyServerState $ ssRoomPool %~ insert roomId (Room userList defaultState)
+          ssRoomPool %= insert roomId (Room [] def)
           $(logTM) InfoS $ "Created room " <> show roomId
-          conn <- getConnection userId
+          conn <- use $ ssUserPool . at userId . _Just . userConn
           sendMessage conn (SRoomCreated roomId)
 doCommand userId (CSay msg) = 
   do
-    usr <- getUser userId
-    let var = usr ^. userRoom
-    notifyEmpty var
-    mbyRoomId <- readMVar var
+    usr <- use $ ssUserPool . ix userId
+    let mbyRoomId = usr ^. userRoom
     case mbyRoomId of
       Just roomId ->
         do
           sendRoomMessage roomId $ SSay userId msg
       Nothing ->
         $(logTM) ErrorS "User is not in a room"
-doCommand userId (CSit seatIdx) =
+doCommand userId (CSit seatIdx) = atomicallyWithState $
   do
-    user <- getUser userId
-    curSeat <- readMVar $ user ^. userSeat
-
-    -- Check whether the user is already sitting at the table
-    if isJust curSeat
-      then $(logTM) ErrorS "User is already sitting at the table"
-      else do
-        mbyRoomId <- readMVar $ user ^. userRoom
-        -- Check whether the user is in a room
-        case mbyRoomId of
-          Just roomId ->
-            do
-              room <- getRoom roomId
-              others <- readMVar $ room ^. roomUsers
-              -- Check whether the seat is taken
-              taken <- anyM ?? others $ \u -> do
-                o <- getUser u
-                seat <- readMVar $ o^. userSeat
-                return $ seat == Just seatIdx
-              if taken
-                then $(logTM) ErrorS "Seat is already taken"
-                else 
-                  do
-                    liftIO . modifyMVar_ (user ^. userSeat) . const . return $ Just seatIdx
-                    sendRoomMessage roomId $ SSit userId seatIdx
-          Nothing -> $(logTM) ErrorS "User is not in a room"
+    mbyUser <- use $ ssUserPool . at userId
+    user <- whenNothing mbyUser undefined
+    let roomId = user ^. userRoom . _Just
+    let player = undefined
+    zoom (ssRoomPool . ix roomId . roomGame) $ sit player seatIdx
 doCommand _ c = $(logTM) ErrorS $ "Cannot handle command " <> show c <> " yet."
 
 addUserToRoom
   :: ( MonadIO m
-     , MonadReader NoBSState m
+     , MonadState ServerState m
      , MonadRandom m
      , KatipContext m
      )
@@ -318,29 +289,22 @@ addUserToRoom
 addUserToRoom userId roomId =
   do
     $(logTM) DebugS "Adding user to room"
-    room <- getRoom roomId
-    let var = room ^. roomUsers
+    atomically $ do
 
-    usr <- getUser userId
-    liftIO . modifyMVar_ (usr ^. userRoom) . const . return $ Just roomId
+      whenM (hasn't (ssUserPool . at userId . _Just . userRoom) <$> get) $ throwSTM ""
+      ssUserPool . at userId . _Just . userRoom ?= roomId
 
-    -- Update room players list serverside
-    notifyEmpty var
-    void . liftIO . modifyMVar_ var $ return . cons userId
+      -- Update room players list serverside
+      whenM (hasn't (ssRoomPool . at roomId . _Just . roomUsers) <$> get) $ throwSTM ""
+      ssRoomPool . at roomId . _Just . roomUsers %= cons userId
 
     -- Tell everyone in the room that the player joined
     player <- getPlayer userId
     sendRoomMessage roomId $ SJoin player
 
-notifyEmpty :: (MonadIO m, KatipContext m) => MVar a -> m ()
-notifyEmpty var =
-  do
-    cond <- liftIO $ isEmptyMVar var
-    when cond $ $(logTM) DebugS "Blocking on MVar"
-
 sendRoomMessage 
   :: ( MonadIO m
-     , MonadReader NoBSState m
+     , MonadState ServerState m
      , MonadRandom m
      , KatipContext m
      )
@@ -349,12 +313,10 @@ sendRoomMessage
   -> m ()
 sendRoomMessage roomId msg =
   do
-    room <- getRoom roomId
-    let var = room ^. roomUsers
-    notifyEmpty var
-    usrs <- readMVar var
+    room <- use $ ssRoomPool . ix roomId
+    let usrs = room ^. roomUsers
     forM_ usrs $ \u -> do
-      conn <- getConnection u
+      conn <- use $ ssUserPool . ix u . userConn
       sendMessage conn msg
 
 roomData 
@@ -366,68 +328,26 @@ roomData
   -> m RoomData
 roomData room = 
   do
-    let var = room ^. roomUsers
-    notifyEmpty var
-    userIds <- readMVar var
+    let userIds = room ^. roomUsers
     players <- traverse getPlayer userIds
     return $ RoomData players
-
-getUser 
-  :: ( MonadReader NoBSState m
-     , MonadIO m
-     )
-  => Unique 
-  -> m User
-getUser userId =
-  do
-    st <- getServerState
-    case st ^. ssUserPool . at userId of
-      Nothing -> error $ "User not found: " <> show userId
-      Just u  -> return u
-
-getRoom 
-  :: ( MonadReader NoBSState m
-     , MonadIO m
-     )
-  => Unique
-  -> m Room
-getRoom roomId =
-  do 
-    st <- getServerState
-    case st ^. ssRoomPool . at roomId of
-      Nothing -> error $ "Room not found: " <> show roomId
-      Just r  -> return r
-
-getConnection 
-  :: ( MonadReader NoBSState m
-     , MonadIO m
-     , KatipContext m
-     )
-  => Unique 
-  -> m Connection
-getConnection userId =
-  do
-    usr <- getUser userId
-    let var = usr ^. userConn
-    notifyEmpty var
-    readMVar var
 
 getPlayer
   :: ( MonadReader NoBSState m
      , MonadIO m
      )
   => Unique 
-  -> m Player
+  -> m S.Player
 getPlayer userId = 
   do
-    player <- getUser userId
-    pName <- readMVar $ player ^. userName
+    player <- use $ ssUserPool . ix userId
+    let pName = player ^. userName
     let money = player ^. userMoney
-    seat <- readMVar $ player ^. userSeat
+    let seat = player ^. userSeat
     return $ Player userId pName money seat
 
 sendMessage 
-  :: ( MonadReader NoBSState m
+  :: ( MonadState ServerState m
      , MonadIO m
      , KatipContext m
      )
@@ -438,20 +358,6 @@ sendMessage conn msg =
   do
     $(logTM) DebugS $ "Sending message: " <> show msg
     liftIO $ sendTextData conn $ encode msg
-
-getServerState
-  :: ( MonadIO m
-     , MonadReader NoBSState m
-     )
-  => m ServerState
-getServerState = readIORef =<< view nsServerState
-
-modifyServerState
-  :: ( MonadIO m
-     , MonadReader NoBSState m
-     )
-  => (ServerState -> ServerState) -> m ()
-modifyServerState f = (`modifyIORef` f) =<< view nsServerState
 
 nobsServer 
   :: ( MonadIO m
@@ -486,7 +392,7 @@ main =
 
         -- Start the server
         $(logTM) InfoS "Starting server at port 8080"
-        ref <- newIORef emptyState
+        ref <- newTVarIO def
         let st = NoBSState
               { _nsServerState = ref
               , _nsLogEnv = le
@@ -494,4 +400,17 @@ main =
               , _nsLogNamespace = "main"
               }
         liftIO . run 8080 $ app st
+
+atomicallyWithState 
+  :: ( MonadIO m
+     , MonadReader NoBSState m
+     ) 
+  => StateT ServerState STM a -> m a
+atomicallyWithState act = atomically $ 
+  do
+    var <- view nsServerState
+    st <- readTVar var
+    (a, st') <- runStateT act st
+    writeTVar var st'
+    return a
 
