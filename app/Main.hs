@@ -417,7 +417,7 @@ getPlayer
      , MonadIO m
      )
   => Unique 
-  -> m Player
+  -> m Shared.Player
 getPlayer userId = 
   do
     player <- getUser userId

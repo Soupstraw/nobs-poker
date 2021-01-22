@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 74103a89216badda75a5396821dd3463213d1279cffc6df6e5ede817b3b55ea1
+-- hash: ae676ba3c64f11b2216454ebd8c7b0247f9d04dbff3e22fee3cfcc22784c0923
 
 name:           nobs-server
 version:        0.1.0.0
@@ -28,6 +28,7 @@ source-repository head
 library
   exposed-modules:
       Game
+      Hands
   other-modules:
       Paths_nobs_server
   hs-source-dirs:
