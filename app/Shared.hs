@@ -4,7 +4,10 @@ module Shared
   ( ClientMsg(..), ServerMsg(..)
   , RoomData(..), Player(..)
   , Unique(..)
+  , Rank(..), Suit(..), Card(..)
+  , PokerHand(..)
   , generateModule
+  , pPlaying, pHand, pCards
   ) where
 
 import Relude
@@ -13,14 +16,82 @@ import Elm.Derive
 import Elm.Module
 
 import Control.Monad.Random
-
-import Data.Aeson hiding (defaultOptions)
+import Control.Lens
 
 import qualified Text.Show as T
 
+data Rank
+  = R2
+  | R3
+  | R4
+  | R5
+  | R6
+  | R7
+  | R8
+  | R9
+  | RT
+  | RJ
+  | RQ
+  | RK
+  | RA
+  deriving (Enum, Eq, Ord, Show)
+deriveBoth (defaultOptionsDropLower 1) ''Rank
+
+data Suit
+  = Clubs
+  | Diamonds
+  | Hearts
+  | Spades
+  deriving (Enum, Eq, Ord)
+deriveBoth (defaultOptionsDropLower 1) ''Suit
+
+instance Show Suit where
+  show Clubs    = "♣"
+  show Diamonds = "♦"
+  show Hearts   = "♥"
+  show Spades   = "♠"
+
+data Card = Card 
+  { _cRank :: Rank 
+  , _cSuit :: Suit
+  } deriving (Eq, Ord)
+deriveBoth (defaultOptionsDropLower 1) ''Card
+
+instance Show Card where
+  show c = drop 1 $ show (_cRank c) <> show (_cSuit c)
+
+instance Enum Card where
+  fromEnum (Card r s) = fromEnum r * 4 + fromEnum s
+  toEnum x = Card (toEnum $ x `div` 4) (toEnum $ x `mod` 4)
+
+data PokerHand
+  = HighCard Card
+  | OnePair (Card, Card)
+  | TwoPair (Card, Card) (Card, Card)
+  | ThreeOfAKind (Card, Card, Card)
+  | Straight (Card, Card, Card, Card, Card)
+  | FullHouse (Card, Card, Card) (Card, Card)
+  | Flush (Card, Card, Card, Card, Card)
+  | FourOfAKind (Card, Card, Card, Card)
+  | StraightFlush (Card, Card, Card, Card, Card)
+  | DoubleStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+  | TripleStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+      (Card, Card, Card, Card, Card)
+  | QuadStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+  deriving (Show, Eq, Ord)
+deriveBoth (defaultOptionsDropLower 1) ''PokerHand
+
 newtype Unique = Unique Text
   deriving (Eq, Ord)
-deriveBoth defaultOptions ''Unique
+deriveBoth (defaultOptionsDropLower 1) ''Unique
 
 instance Show Unique where
   show (Unique x) = toString x
@@ -30,19 +101,22 @@ instance Random Unique where
     where (x, g') = random g
 
 data Player = Player
-  { pUserID   :: Unique
-  , pUserName :: Text
-  , pMoney    :: Int
-  , pSeat     :: Maybe Int
+  { _pUserID   :: Unique
+  , _pUserName :: Text
+  , _pSeat     :: Maybe Int
+  , _pCards    :: Int
+  , _pHand     :: [Card]
+  , _pPlaying  :: Bool
   }
   deriving (Show)
-deriveBoth defaultOptions ''Player
+deriveBoth (defaultOptionsDropLower 1) ''Player
+makeLenses ''Player
 
-data RoomData = RoomData
-  { rdPlayers :: [Player]
+newtype RoomData = RoomData
+  { _rdPlayers :: [Player]
   }
   deriving (Show)
-deriveBoth defaultOptions ''RoomData
+deriveBoth (defaultOptionsDropLower 1) ''RoomData
 
 data ClientMsg
   = CJoin Text
@@ -54,7 +128,7 @@ data ClientMsg
   | CCall
   | CFold
   deriving (Show)
-deriveBoth defaultOptions ''ClientMsg
+deriveBoth (defaultOptionsDropLower 1) ''ClientMsg
 
 data ServerMsg
   = SRoomData RoomData
@@ -68,7 +142,7 @@ data ServerMsg
   | SDrawCards
   | SRoomCreated Unique
   deriving (Show)
-deriveBoth defaultOptions ''ServerMsg
+deriveBoth (defaultOptionsDropLower 1) ''ServerMsg
 
 generateModule :: Text
 generateModule = toText $ makeElmModule "NoBSAPI"
@@ -77,5 +151,9 @@ generateModule = toText $ makeElmModule "NoBSAPI"
   , DefineElm (Proxy :: Proxy Player)
   , DefineElm (Proxy :: Proxy RoomData)
   , DefineElm (Proxy :: Proxy Unique)
+  , DefineElm (Proxy :: Proxy Rank)
+  , DefineElm (Proxy :: Proxy Suit)
+  , DefineElm (Proxy :: Proxy Card)
+  , DefineElm (Proxy :: Proxy PokerHand)
   ]
 

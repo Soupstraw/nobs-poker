@@ -9,33 +9,9 @@ import Relude
 import Data.List as L
 import Data.Maybe
 
-import qualified Text.Show
+import Shared
 
 --import Debug.Trace
-
-data PokerHand
-  = HighCard Card
-  | OnePair (Card, Card)
-  | TwoPair (Card, Card) (Card, Card)
-  | ThreeOfAKind (Card, Card, Card)
-  | Straight (Card, Card, Card, Card, Card)
-  | FullHouse (Card, Card, Card) (Card, Card)
-  | Flush (Card, Card, Card, Card, Card)
-  | FourOfAKind (Card, Card, Card, Card)
-  | StraightFlush (Card, Card, Card, Card, Card)
-  | DoubleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  | TripleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-      (Card, Card, Card, Card, Card)
-  | QuadStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  deriving (Show, Eq, Ord)
 
 follows :: Card -> Card -> Bool
 follows x y
@@ -158,47 +134,6 @@ handStrengths hand =
         --traceShowM $ sortOn (Down . _cRank) h
         --traceShowM $ reverse h
         checkStraight . reverse . map L.head $ groupBy (\x y -> _cRank x == _cRank y) h
-
-data Rank
-  = R2
-  | R3
-  | R4
-  | R5
-  | R6
-  | R7
-  | R8
-  | R9
-  | RT
-  | RJ
-  | RQ
-  | RK
-  | RA
-  deriving (Enum, Eq, Ord, Show)
-
-data Suit
-  = Clubs
-  | Diamonds
-  | Hearts
-  | Spades
-  deriving (Enum, Eq, Ord)
-
-instance Show Suit where
-  show Clubs    = "♣"
-  show Diamonds = "♦"
-  show Hearts   = "♥"
-  show Spades   = "♠"
-
-data Card = Card 
-  { _cRank :: Rank 
-  , _cSuit :: Suit
-  } deriving (Eq, Ord)
-
-instance Show Card where
-  show c = show (_cRank c) <> show (_cSuit c)
-
-instance Enum Card where
-  fromEnum (Card r s) = fromEnum r * 4 + fromEnum s
-  toEnum x = Card (toEnum $ x `div` 4) (toEnum $ x `mod` 4)
 
 deck24 :: [Card]
 deck24 = drop 28 deck52

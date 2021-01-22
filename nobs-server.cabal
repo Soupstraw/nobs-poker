@@ -4,7 +4,7 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ae676ba3c64f11b2216454ebd8c7b0247f9d04dbff3e22fee3cfcc22784c0923
+-- hash: 23efb12a287f5ad24bebef8e17feec0daf5e84fa79c0354de68080a7a52f1dba
 
 name:           nobs-server
 version:        0.1.0.0
@@ -25,48 +25,11 @@ source-repository head
   type: git
   location: https://github.com/Soupstraw/NoBSPoker
 
-library
-  exposed-modules:
-      Game
-      Hands
-  other-modules:
-      Paths_nobs_server
-  hs-source-dirs:
-      src
-  default-extensions: BangPatterns BinaryLiterals ConstraintKinds DataKinds DefaultSignatures DeriveDataTypeable DeriveFoldable DeriveFunctor DeriveGeneric DeriveTraversable DoAndIfThenElse EmptyDataDecls ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings PartialTypeSignatures PatternGuards PolyKinds RankNTypes RecordWildCards ScopedTypeVariables StandaloneDeriving TupleSections TypeFamilies TypeSynonymInstances ViewPatterns NoImplicitPrelude
-  ghc-options: -Wall
-  build-depends:
-      MonadRandom
-    , aeson
-    , base >=4.7 && <5
-    , base64
-    , blaze-html
-    , bytestring
-    , concurrency
-    , containers
-    , elm-bridge
-    , exceptions
-    , formatting
-    , katip
-    , lens
-    , mtl
-    , random-shuffle
-    , relude
-    , servant
-    , servant-server
-    , servant-websockets
-    , text
-    , uniplate
-    , vector
-    , wai
-    , warp
-    , websockets
-    , word8
-  default-language: Haskell2010
-
 executable nobs-server
   main-is: Main.hs
   other-modules:
+      Game
+      Hands
       Shared
       Paths_nobs_server
   hs-source-dirs:
@@ -82,13 +45,13 @@ executable nobs-server
     , bytestring
     , concurrency
     , containers
+    , data-default
     , elm-bridge
     , exceptions
     , formatting
     , katip
     , lens
     , mtl
-    , nobs-server
     , random-shuffle
     , relude
     , servant
@@ -114,7 +77,6 @@ test-suite nobs-server-test
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
-    , NoBSPoker
     , aeson
     , base >=4.7 && <5
     , base64
@@ -122,6 +84,7 @@ test-suite nobs-server-test
     , bytestring
     , concurrency
     , containers
+    , data-default
     , elm-bridge
     , exceptions
     , formatting

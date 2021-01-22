@@ -14,6 +14,7 @@ import Control.Monad.Random
 
 import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
+import Data.Default (def)
 import Data.Map ()
 
 import Katip
@@ -32,7 +33,6 @@ import Game
 data User = User
   { _userName  :: MVar Text
   , _userConn  :: MVar Connection
-  , _userMoney :: Int
   , _userRoom  :: MVar (Maybe Unique)
   , _userSeat  :: MVar (Maybe Int)
   }
@@ -129,7 +129,7 @@ addUser conn =
         mvarName <- newMVar pname
         mvarRoom <- newMVar Nothing
         mvarSeatIdx <- newMVar Nothing
-        let newUser = User mvarName mvarConn 0 mvarRoom mvarSeatIdx
+        let newUser = User mvarName mvarConn mvarRoom mvarSeatIdx
         mdf <- modifyIORef <$> view nsServerState
         mdf $ ssUserPool %~ insert uid newUser
         $(logTM) DebugS . ls $ "Added player " <> pname
@@ -260,7 +260,7 @@ doCommand userId CCreateRoom =
       Nothing -> 
         do
           userList <- newMVar []
-          modifyServerState $ ssRoomPool %~ insert roomId (Room userList defaultState)
+          modifyServerState $ ssRoomPool %~ insert roomId (Room userList def)
           $(logTM) InfoS $ "Created room " <> show roomId
           conn <- getConnection userId
           sendMessage conn (SRoomCreated roomId)
@@ -422,9 +422,15 @@ getPlayer userId =
   do
     player <- getUser userId
     pName <- readMVar $ player ^. userName
-    let money = player ^. userMoney
     seat <- readMVar $ player ^. userSeat
-    return $ Player userId pName money seat
+    return $ Player
+               { _pUserID   = userId
+               , _pUserName = pName
+               , _pSeat     = seat
+               , _pCards    = 1
+               , _pHand     = []
+               , _pPlaying  = True
+               }
 
 sendMessage 
   :: ( MonadReader NoBSState m

@@ -27,6 +27,7 @@ dependencies:
 - bytestring
 - concurrency
 - containers
+- data-default
 - elm-bridge
 - exceptions
 - formatting
@@ -46,9 +47,6 @@ dependencies:
 - warp
 - websockets
 - word8
-
-library:
-  source-dirs: src
 
 ghc-options:
   -Wall
@@ -101,8 +99,6 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
-    - nobs-server
 
 tests:
   nobs-server-test:
@@ -112,5 +108,3 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
-    - NoBSPoker
