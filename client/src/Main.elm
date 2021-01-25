@@ -34,6 +34,15 @@ port port_messageReceiver : (String -> msg) -> Sub msg
 seatCount : number
 seatCount = 10
 
+color : { blue : Color, darkCharcoal : Color, lightBlue : Color, lightGrey : Color, white : Color }
+color = 
+    { blue = rgb255 0x72 0x9F 0xCF
+    , darkCharcoal = rgb255 0x2E 0x34 0x36
+    , lightBlue = rgb255 0xC5 0xE8 0xF7
+    , lightGrey = rgb255 0xE0 0xE0 0xE0
+    , white = rgb255 0xFF 0xFF 0xFF
+    }
+
 main : Program () Model Msg
 main = application
   { init = init
@@ -45,13 +54,14 @@ main = application
   }
 
 type alias GameRec = 
-  { raiseAmt : Int
-  , minRaise : Int
-  , messages : List String
-  , draft    : String
-  , roomId   : Int
-  , players  : List API.Player
-  , key      : Key
+  { messages      : List String
+  , draft         : String
+  , roomId        : Int
+  , players       : List API.Player
+  , key           : Key
+  , currentBid    : Maybe API.Bid
+  , selectedBid   : Maybe API.Bid
+  , playerSitting : Bool
   }
 
 type alias MenuRec =
@@ -68,13 +78,11 @@ type Model
   | Conn ConnRec
 
 type Msg 
-  = Fold 
-  | Call 
-  | Raise
+  = CallBluff
+  | Bid API.Bid
   | Send API.ClientMsg
   | Recv String
   | Draft String
-  | SetBet String
   | UrlChange Url
   | UrlReq UrlRequest
   | Connected String
@@ -103,21 +111,17 @@ update msg mdl =
 handleGameMsg : GameRec -> Msg -> (Model, Cmd Msg)
 handleGameMsg model msg = 
   case msg of
-    Draft x  -> 
+    Draft x   -> 
       ( Game { model | draft = x }
       , Cmd.none
       )
-    Raise    -> 
-      ( Game { model | raiseAmt = 0}
-      , sendMessage <| API.CRaise <| model.raiseAmt
-      )
-    Call     ->
+    Bid bid   -> 
       ( Game model
-      , sendMessage API.CCall
+      , sendMessage <| API.CBid bid
       )
-    Fold     ->
+    CallBluff ->
       ( Game model
-      , sendMessage API.CFold
+      , sendMessage API.CCallBluff
       )
     Recv m   -> 
       case JD.decodeString API.jsonDecServerMsg m of
@@ -147,22 +151,8 @@ handleGameMsg model msg =
       ( Game { model | draft = ""}
       , sendMessage x
       )
-    SetBet x -> case String.toInt x of
-      Just amt -> 
-        ( Game { model |  raiseAmt = amt }
-        , Cmd.none
-        )
-      Nothing  -> if x == "" 
-                    then 
-                      ( Game {model | raiseAmt = 0}
-                      , Cmd.none
-                      )
-                    else 
-                      ( Game model
-                      , Cmd.none
-                      )
     Sit x -> 
-      ( Game model
+      ( Game {model | playerSitting = True}
       , sendMessage <| API.CSit <| x
       )
     x -> Debug.todo <| "Unexpected message: " ++ Debug.toString x
@@ -213,13 +203,14 @@ handleConnMsg model msg =
 
 fromData : API.RoomData -> Key -> GameRec
 fromData data key = 
-  { raiseAmt = 0
-  , draft = ""
-  , messages = []
-  , minRaise = 0
-  , players = data.rdPlayers
-  , roomId = 0
-  , key = key
+  { draft         = ""
+  , messages      = []
+  , players       = data.rdPlayers
+  , roomId        = 0
+  , key           = key
+  , selectedBid   = Nothing
+  , currentBid    = Nothing
+  , playerSitting = False
   }
 
 subscriptions : Model -> Sub Msg
@@ -356,27 +347,10 @@ inputRow model = row
   , alignBottom
   ]
   [ I.button buttonStyle
-      { onPress = Just Fold
-      , label = text "Fold"
+      { onPress = Nothing
+      , label = text "Call Bluff"
       }
-  , I.button buttonStyle
-      { onPress = Just Call
-      , label = text "Call"
-      }
-  , column [width fill, height fill]
-      [ I.text [alignTop] 
-          { label = I.labelHidden "Raise amount"
-          , onChange = SetBet
-          , placeholder = Just (I.placeholder [] <| text <| S.fromInt model.minRaise)
-          , text = if model.raiseAmt == 0
-                     then ""
-                     else S.fromInt model.raiseAmt
-          }
-      , I.button buttonStyle
-          { onPress = Just Raise
-          , label = text "Raise"
-          }
-      ]
+  , bidTable
   ]
 
 buttonStyle : List (Attribute msg)
@@ -385,6 +359,59 @@ buttonStyle =
   , height fill
   , F.center
   ]
+
+tableStyle : List (Attribute msg)
+tableStyle =
+  [ width fill
+  , height fill
+  , F.center
+  , spaceEvenly
+  ]
+
+bidTable : Element Msg
+bidTable = row tableStyle
+  [ suitColumn "1x"
+  , suitColumn "2x"
+  , doubleSuitColumn "2x+2x"
+  , suitColumn "3x"
+  , straightColumn "Straight"
+  , doubleSuitColumn "3x+2x"
+  , flushColumn "Flush"
+  , suitColumn "4x"
+  , straightFlushColumn
+  ]
+
+suitColumn : String -> Element Msg
+suitColumn header = column [] <| L.append [text header] suitColumn1
+
+suitColumn1 : List (Element Msg)
+suitColumn1 = 
+  let
+    f i = 
+      I.button buttonStyle
+        { onPress = Nothing
+        , label   = text <| indexToRank i
+        }
+  in 
+    L.map f <| L.range 14 2
+
+doubleSuitColumn : String -> Element Msg
+doubleSuitColumn header = column [] 
+  [ text header
+  , row [spaceEvenly] 
+      [ column [] suitColumn1 
+      , column [] suitColumn1
+      ]
+  ]
+
+straightColumn : String -> Element Msg
+straightColumn header = column [] []
+
+flushColumn : String -> Element Msg
+flushColumn header = column [] []
+
+straightFlushColumn : Element Msg
+straightFlushColumn = column [] []
 
 tablePlayer : Int -> GameRec -> Element Msg
 tablePlayer idx model =
@@ -396,20 +423,24 @@ tablePlayer idx model =
        , centerX
        , centerY
        ]
+    styleGreyed = L.append style [F.color color.lightGrey]
   in 
     case find (\x -> x.pSeat == Just idx) model.players of
       Just player ->
         column
           style
           [ text <| player.pUserName
-          , text <| "$" ++ String.fromInt player.pMoney
           ]
       _ -> 
-        I.button 
-          style
-          { onPress = Just <| Sit idx
-          , label = text "Sit"
-          }
+        if model.playerSitting
+          then
+            column styleGreyed [text "Sit"]
+          else
+            I.button 
+              style
+              { onPress = Just <| Sit idx
+              , label = text "Sit"
+              }
 
 playerStyle : List (Attribute msg)
 playerStyle =
@@ -426,4 +457,15 @@ sendMessage msg =
 addMessage : GameRec -> String -> GameRec
 addMessage model msg = 
   { model | messages = model.messages ++ [msg] }
+
+indexToRank : Int -> String
+indexToRank x = 
+  case x of
+    10 -> "T"
+    11 -> "J"
+    12 -> "Q"
+    13 -> "K"
+    14 -> "A"
+    y  -> S.fromInt y
+
 

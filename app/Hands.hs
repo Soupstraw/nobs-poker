@@ -2,6 +2,7 @@ module Hands
   ( deck52, deck24
   , handStrength
   , allHands
+  , PokerHand(..)
   ) where
 
 import Relude
@@ -12,6 +13,30 @@ import Data.Maybe
 import Shared
 
 --import Debug.Trace
+
+data PokerHand
+  = HighCard Card
+  | OnePair (Card, Card)
+  | TwoPair (Card, Card) (Card, Card)
+  | ThreeOfAKind (Card, Card, Card)
+  | Straight (Card, Card, Card, Card, Card)
+  | FullHouse (Card, Card, Card) (Card, Card)
+  | Flush (Card, Card, Card, Card, Card)
+  | FourOfAKind (Card, Card, Card, Card)
+  | StraightFlush (Card, Card, Card, Card, Card)
+  | DoubleStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+  | TripleStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+      (Card, Card, Card, Card, Card)
+  | QuadStraightFlush 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card) 
+      (Card, Card, Card, Card, Card)
+  deriving (Show, Eq, Ord)
 
 follows :: Card -> Card -> Bool
 follows x y

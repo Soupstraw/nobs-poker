@@ -5,7 +5,6 @@ module Shared
   , RoomData(..), Player(..)
   , Unique(..)
   , Rank(..), Suit(..), Card(..)
-  , PokerHand(..)
   , generateModule
   , pPlaying, pHand, pCards
   ) where
@@ -51,6 +50,23 @@ instance Show Suit where
   show Hearts   = "♥"
   show Spades   = "♠"
 
+data Bid
+  = HighCard Rank
+  | OnePair  Rank
+  | TwoPair  Rank Rank
+  | ThreeOfAKind Rank
+  | Straight Rank
+  | FullHouse Rank Rank
+  | Flush Suit
+  | FourOfAKind Rank
+  | StraightFlush Rank Suit
+  | DoubleStraightFlush Suit Suit
+  | TripleStraightFlush Suit Suit Suit
+  | QuadrupleStraightFlush
+  deriving (Show, Eq, Ord)
+deriveBoth defaultOptions ''Bid
+
+
 data Card = Card 
   { _cRank :: Rank 
   , _cSuit :: Suit
@@ -63,31 +79,6 @@ instance Show Card where
 instance Enum Card where
   fromEnum (Card r s) = fromEnum r * 4 + fromEnum s
   toEnum x = Card (toEnum $ x `div` 4) (toEnum $ x `mod` 4)
-
-data PokerHand
-  = HighCard Card
-  | OnePair (Card, Card)
-  | TwoPair (Card, Card) (Card, Card)
-  | ThreeOfAKind (Card, Card, Card)
-  | Straight (Card, Card, Card, Card, Card)
-  | FullHouse (Card, Card, Card) (Card, Card)
-  | Flush (Card, Card, Card, Card, Card)
-  | FourOfAKind (Card, Card, Card, Card)
-  | StraightFlush (Card, Card, Card, Card, Card)
-  | DoubleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  | TripleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-      (Card, Card, Card, Card, Card)
-  | QuadStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  deriving (Show, Eq, Ord)
-deriveBoth (defaultOptionsDropLower 1) ''PokerHand
 
 newtype Unique = Unique Text
   deriving (Eq, Ord)
@@ -112,7 +103,7 @@ data Player = Player
 deriveBoth (defaultOptionsDropLower 1) ''Player
 makeLenses ''Player
 
-newtype RoomData = RoomData
+data RoomData = RoomData
   { _rdPlayers :: [Player]
   }
   deriving (Show)
@@ -124,9 +115,8 @@ data ClientMsg
   | CLeave
   | CSit Int
   | CSay Text
-  | CRaise Int
-  | CCall
-  | CFold
+  | CBid Bid
+  | CCallBluff
   deriving (Show)
 deriveBoth (defaultOptionsDropLower 1) ''ClientMsg
 
@@ -136,9 +126,8 @@ data ServerMsg
   | SSay Unique Text
   | SLeave Unique
   | SSit Unique Int
-  | SRaise Unique Int
-  | SCall Unique
-  | SFold Unique
+  | SBid Bid
+  | SCallBluff
   | SDrawCards
   | SRoomCreated Unique
   deriving (Show)
@@ -154,6 +143,6 @@ generateModule = toText $ makeElmModule "NoBSAPI"
   , DefineElm (Proxy :: Proxy Rank)
   , DefineElm (Proxy :: Proxy Suit)
   , DefineElm (Proxy :: Proxy Card)
-  , DefineElm (Proxy :: Proxy PokerHand)
+  , DefineElm (Proxy :: Proxy Bid)
   ]
 
