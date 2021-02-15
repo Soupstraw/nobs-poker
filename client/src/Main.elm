@@ -368,6 +368,11 @@ tableStyle =
   , spaceEvenly
   ]
 
+bidColStyle : List (Attribute msg)
+bidColStyle =
+  [ alignTop
+  ]
+
 bidTable : Element Msg
 bidTable = row tableStyle
   [ suitColumn "1x"
@@ -382,7 +387,7 @@ bidTable = row tableStyle
   ]
 
 suitColumn : String -> Element Msg
-suitColumn header = column [] <| L.append [text header] suitColumn1
+suitColumn header = column bidColStyle <| L.append [text header] suitColumn1
 
 suitColumn1 : List (Element Msg)
 suitColumn1 = 
@@ -390,13 +395,13 @@ suitColumn1 =
     f i = 
       I.button buttonStyle
         { onPress = Nothing
-        , label   = text <| indexToRank i
+        , label   = text <| indexToRank <| 16 - i
         }
   in 
-    L.map f <| L.range 14 2
+    L.map f <| L.range 2 7
 
 doubleSuitColumn : String -> Element Msg
-doubleSuitColumn header = column [] 
+doubleSuitColumn header = column bidColStyle 
   [ text header
   , row [spaceEvenly] 
       [ column [] suitColumn1 
@@ -405,13 +410,43 @@ doubleSuitColumn header = column []
   ]
 
 straightColumn : String -> Element Msg
-straightColumn header = column [] []
+straightColumn header = column bidColStyle 
+  [ text header
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "T-A"
+      }
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "9-K"
+      }
+  ]
 
 flushColumn : String -> Element Msg
-flushColumn header = column [] []
+flushColumn header = column bidColStyle 
+  [ text header
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "♣"
+      }
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "♢"
+      }
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "♡"
+      }
+  , I.button buttonStyle
+      { onPress = Nothing
+      , label = text "♠"
+      }
+  ]
 
 straightFlushColumn : Element Msg
-straightFlushColumn = column [] []
+straightFlushColumn = column bidColStyle 
+  [ text "SF"
+  ]
 
 tablePlayer : Int -> GameRec -> Element Msg
 tablePlayer idx model =

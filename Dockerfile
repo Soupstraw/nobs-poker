@@ -15,7 +15,7 @@ RUN elm make src/Main.elm --output=elm.js
 
 # Build nobs-poker server
 WORKDIR /opt/nobs-poker
-COPY src src
+#COPY src src
 COPY app app
 COPY test test
 COPY package.yaml stack.yaml README.md ChangeLog.md ./
