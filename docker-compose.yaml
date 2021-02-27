@@ -1,0 +1,19 @@
+services:
+  nobs-poker:
+    build: .
+    ports: 
+      - "8080:8080"
+    volumes:
+      - ./app:/root/nobs-poker/app
+      - ./client:/root/nobs-poker/client
+      - ./test:/root/nobs-poker/test
+      - ./tools:/root/nobs-poker/tools
+      - ./package.yaml:/root/nobs-poker/package.yaml
+      - ./stack.yaml:/root/nobs-poker/stack.yaml
+      - ./README.md:/root/nobs-poker/README.md
+      - ./ChangeLog.md:/root/nobs-poker/ChangeLog.md
+      - stack-work:/root/nobs-poker/.stack-work
+
+volumes:
+  stack-work:
+
