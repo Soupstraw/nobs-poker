@@ -39,22 +39,22 @@ data GameStage
   | Playing
 
 data GameState = GameState
-  { _gsSeats        :: Vector (Maybe Player)
-  , _gsTurn         :: Int
-  , _gsHighestOffer :: Maybe PokerHand
-  , _gsOfferIdx     :: Int
-  , _gsDeck         :: [Card]
-  , _gsStage        :: GameStage
+  { _gsSeats      :: Vector (Maybe Player)
+  , _gsTurn       :: Int
+  , _gsHighestBid :: Maybe Bid
+  , _gsOfferIdx   :: Int
+  , _gsDeck       :: [Card]
+  , _gsStage      :: GameStage
   }
 
 instance Default GameState where
   def = GameState
-          { _gsSeats        = V.replicate 8 Nothing
-          , _gsTurn         = 0
-          , _gsDeck         = deck24
-          , _gsStage        = Lobby
-          , _gsHighestOffer = Nothing
-          , _gsOfferIdx     = 0
+          { _gsSeats      = V.replicate 8 Nothing
+          , _gsTurn       = 0
+          , _gsDeck       = deck24
+          , _gsStage      = Lobby
+          , _gsHighestBid = Nothing
+          , _gsOfferIdx   = 0
           }
 makeLenses ''GameState
 
@@ -119,32 +119,16 @@ callBluff
   => m ()
 callBluff = 
   do
-    table <- use $ gsSeats . folded . _Just . pHand
-    let hands = allHands table
-    offer' <- use gsHighestOffer
-    offer <- whenNothing offer' $ throwError BadBluffCall
-    if offer `elem` hands
-      then do
-        currentPlayer . _Just . pCards += 1
-      else do
-        offerPlayer . _Just . pCards += 1
-        offerIdx <- use gsOfferIdx
-        gsTurn .= offerIdx
+    undefined
 
 raise 
   :: ( MonadState GameState m
      , MonadError GameException m
      )
-  => PokerHand -> m ()
+  => Bid -> m ()
 raise hand = 
   do
-    curOffer <- use gsHighestOffer
-    case curOffer of
-      Just cur -> do
-        when (cur > hand) $ throwError BadRaise
-        gsHighestOffer ?= hand
-        passTurn
-      Nothing  -> gsHighestOffer ?= hand
+    undefined
 
 playersPlaying :: MonadState GameState m => m Int
 playersPlaying = 

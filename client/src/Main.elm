@@ -402,7 +402,6 @@ tablePlayer idx model =
         column
           style
           [ text <| player.pUserName
-          , text <| "$" ++ String.fromInt player.pMoney
           ]
       _ -> 
         I.button 

@@ -5,7 +5,7 @@ module Shared
   , RoomData(..), Player(..)
   , Unique(..)
   , Rank(..), Suit(..), Card(..)
-  , PokerHand(..)
+  , Bid(..)
   , generateModule
   , pPlaying, pHand, pCards
   ) where
@@ -64,30 +64,11 @@ instance Enum Card where
   fromEnum (Card r s) = fromEnum r * 4 + fromEnum s
   toEnum x = Card (toEnum $ x `div` 4) (toEnum $ x `mod` 4)
 
-data PokerHand
-  = HighCard Card
-  | OnePair (Card, Card)
-  | TwoPair (Card, Card) (Card, Card)
-  | ThreeOfAKind (Card, Card, Card)
-  | Straight (Card, Card, Card, Card, Card)
-  | FullHouse (Card, Card, Card) (Card, Card)
-  | Flush (Card, Card, Card, Card, Card)
-  | FourOfAKind (Card, Card, Card, Card)
-  | StraightFlush (Card, Card, Card, Card, Card)
-  | DoubleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  | TripleStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-      (Card, Card, Card, Card, Card)
-  | QuadStraightFlush 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card) 
-      (Card, Card, Card, Card, Card)
-  deriving (Show, Eq, Ord)
-deriveBoth (defaultOptionsDropLower 1) ''PokerHand
+data Bid 
+  = HighCard Rank
+  | OnePair Rank
+  | TwoPair Rank Rank
+  | ThreeOfAKind Rank
 
 newtype Unique = Unique Text
   deriving (Eq, Ord)
@@ -112,7 +93,7 @@ data Player = Player
 deriveBoth (defaultOptionsDropLower 1) ''Player
 makeLenses ''Player
 
-newtype RoomData = RoomData
+data RoomData = RoomData
   { _rdPlayers :: [Player]
   }
   deriving (Show)
@@ -154,6 +135,5 @@ generateModule = toText $ makeElmModule "NoBSAPI"
   , DefineElm (Proxy :: Proxy Rank)
   , DefineElm (Proxy :: Proxy Suit)
   , DefineElm (Proxy :: Proxy Card)
-  , DefineElm (Proxy :: Proxy PokerHand)
   ]
 

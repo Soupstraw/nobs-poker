@@ -124,15 +124,17 @@ jsonEncPlayer  val =
 
 
 
-type alias RoomData  = (List Player)
+type alias RoomData  =
+   { rdPlayers: (List Player)
+   }
 
 jsonDecRoomData : Json.Decode.Decoder ( RoomData )
 jsonDecRoomData =
-    Json.Decode.list (jsonDecPlayer)
+   Json.Decode.succeed (\prdPlayers -> {rdPlayers = prdPlayers}) |> custom (Json.Decode.list (jsonDecPlayer))
 
 jsonEncRoomData : RoomData -> Value
-jsonEncRoomData  val = (Json.Encode.list jsonEncPlayer) val
-
+jsonEncRoomData  val =
+   (Json.Encode.list jsonEncPlayer) val.rdPlayers
 
 
 type alias Unique  = String
@@ -223,55 +225,4 @@ jsonEncCard  val =
    [ ("cRank", jsonEncRank val.cRank)
    , ("cSuit", jsonEncSuit val.cSuit)
    ]
-
-
-
-type PokerHand  =
-    HighCard Card
-    | OnePair (Card, Card)
-    | TwoPair (Card, Card) (Card, Card)
-    | ThreeOfAKind (Card, Card, Card)
-    | Straight (Card, Card, Card, Card, Card)
-    | FullHouse (Card, Card, Card) (Card, Card)
-    | Flush (Card, Card, Card, Card, Card)
-    | FourOfAKind (Card, Card, Card, Card)
-    | StraightFlush (Card, Card, Card, Card, Card)
-    | DoubleStraightFlush (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card)
-    | TripleStraightFlush (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card)
-    | QuadStraightFlush (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card) (Card, Card, Card, Card, Card)
-
-jsonDecPokerHand : Json.Decode.Decoder ( PokerHand )
-jsonDecPokerHand =
-    let jsonDecDictPokerHand = Dict.fromList
-            [ ("HighCard", Json.Decode.lazy (\_ -> Json.Decode.map HighCard (jsonDecCard)))
-            , ("OnePair", Json.Decode.lazy (\_ -> Json.Decode.map OnePair (Json.Decode.map2 tuple2 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)))))
-            , ("TwoPair", Json.Decode.lazy (\_ -> Json.Decode.map2 TwoPair (Json.Decode.index 0 (Json.Decode.map2 tuple2 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)))) (Json.Decode.index 1 (Json.Decode.map2 tuple2 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard))))))
-            , ("ThreeOfAKind", Json.Decode.lazy (\_ -> Json.Decode.map ThreeOfAKind (Json.Decode.map3 tuple3 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)))))
-            , ("Straight", Json.Decode.lazy (\_ -> Json.Decode.map Straight (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))))
-            , ("FullHouse", Json.Decode.lazy (\_ -> Json.Decode.map2 FullHouse (Json.Decode.index 0 (Json.Decode.map3 tuple3 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)))) (Json.Decode.index 1 (Json.Decode.map2 tuple2 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard))))))
-            , ("Flush", Json.Decode.lazy (\_ -> Json.Decode.map Flush (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))))
-            , ("FourOfAKind", Json.Decode.lazy (\_ -> Json.Decode.map FourOfAKind (Json.Decode.map4 tuple4 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)))))
-            , ("StraightFlush", Json.Decode.lazy (\_ -> Json.Decode.map StraightFlush (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))))
-            , ("DoubleStraightFlush", Json.Decode.lazy (\_ -> Json.Decode.map2 DoubleStraightFlush (Json.Decode.index 0 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 1 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard))))))
-            , ("TripleStraightFlush", Json.Decode.lazy (\_ -> Json.Decode.map3 TripleStraightFlush (Json.Decode.index 0 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 1 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 2 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard))))))
-            , ("QuadStraightFlush", Json.Decode.lazy (\_ -> Json.Decode.map4 QuadStraightFlush (Json.Decode.index 0 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 1 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 2 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard)))) (Json.Decode.index 3 (Json.Decode.map5 tuple5 (Json.Decode.index 0 (jsonDecCard)) (Json.Decode.index 1 (jsonDecCard)) (Json.Decode.index 2 (jsonDecCard)) (Json.Decode.index 3 (jsonDecCard)) (Json.Decode.index 4 (jsonDecCard))))))
-            ]
-    in  decodeSumObjectWithSingleField  "PokerHand" jsonDecDictPokerHand
-
-jsonEncPokerHand : PokerHand -> Value
-jsonEncPokerHand  val =
-    let keyval v = case v of
-                    HighCard v1 -> ("HighCard", encodeValue (jsonEncCard v1))
-                    OnePair v1 -> ("OnePair", encodeValue ((\(t1,t2) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2]) v1))
-                    TwoPair v1 v2 -> ("TwoPair", encodeValue (Json.Encode.list identity [(\(t1,t2) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2]) v1, (\(t1,t2) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2]) v2]))
-                    ThreeOfAKind v1 -> ("ThreeOfAKind", encodeValue ((\(t1,t2,t3) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3]) v1))
-                    Straight v1 -> ("Straight", encodeValue ((\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1))
-                    FullHouse v1 v2 -> ("FullHouse", encodeValue (Json.Encode.list identity [(\(t1,t2,t3) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3]) v1, (\(t1,t2) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2]) v2]))
-                    Flush v1 -> ("Flush", encodeValue ((\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1))
-                    FourOfAKind v1 -> ("FourOfAKind", encodeValue ((\(t1,t2,t3,t4) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4]) v1))
-                    StraightFlush v1 -> ("StraightFlush", encodeValue ((\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1))
-                    DoubleStraightFlush v1 v2 -> ("DoubleStraightFlush", encodeValue (Json.Encode.list identity [(\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v2]))
-                    TripleStraightFlush v1 v2 v3 -> ("TripleStraightFlush", encodeValue (Json.Encode.list identity [(\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v2, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v3]))
-                    QuadStraightFlush v1 v2 v3 v4 -> ("QuadStraightFlush", encodeValue (Json.Encode.list identity [(\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v1, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v2, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v3, (\(t1,t2,t3,t4,t5) -> Json.Encode.list identity [(jsonEncCard) t1,(jsonEncCard) t2,(jsonEncCard) t3,(jsonEncCard) t4,(jsonEncCard) t5]) v4]))
-    in encodeSumObjectWithSingleField keyval val
 
