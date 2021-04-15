@@ -477,6 +477,7 @@ app s = serve nobsAPI $ hoistServer nobsAPI (runNoBS s) nobsServer
 main :: IO ()
 main = 
   do
+    writeTypes
     -- Set up logging
     handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem DebugS) V2
     logEnv <- initLogEnv "NoBSServer" "production"
@@ -488,7 +489,6 @@ main =
         -- TODO move this to a different executable
         let modulePath = "client/src/NoBSAPI.elm" 
         $(logTM) InfoS $ "Generating Elm API module at " <> fromString modulePath
-        writeFileText modulePath generateModule
 
         -- Start the server
         $(logTM) InfoS "Starting server at port 8080"

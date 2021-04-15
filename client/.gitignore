@@ -1,6 +1,11 @@
-# elm-package generated files
-elm-stuff
-# elm-repl generated files
-repl-temp-*
-elm.js
-node_modules
+/bower_components/
+/node_modules/
+/.pulp-cache/
+/output/
+/generated-docs/
+/.psc-package/
+/.psc*
+/.purs*
+/.psa*
+/.spago
+/.cache

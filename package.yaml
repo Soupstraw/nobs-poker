@@ -28,13 +28,13 @@ dependencies:
 - concurrency
 - containers
 - data-default
-- elm-bridge
 - exceptions
 - formatting
 - katip
 - lens
 - MonadRandom
 - mtl
+- purescript-bridge
 - random-shuffle
 - relude
 - servant
