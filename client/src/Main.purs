@@ -6,15 +6,25 @@ import Effect (Effect)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
-import Halogen.HTML.Events as HE
 import Halogen.VDom.Driver (runUI)
 
-main :: Effect Unit
-main = HA.runHalogenAff do
-  body <- HA.awaitBody
-  runUI component unit body
+import Web.HTML as WH
 
-type State = Int
+main :: Effect Unit
+main = 
+  do
+    win <- WH.window
+    HA.runHalogenAff do
+      body <- HA.awaitBody
+      runUI component unit body
+
+data Player
+
+data State 
+  = MainView 
+  | GameView
+    { players :: Player
+    }
 
 data Action = Increment | Decrement
 
@@ -27,20 +37,14 @@ component =
     }
 
 initialState :: forall a. a -> State
-initialState _ = 0
+initialState _ = MainView
 
-render :: forall a b. Show a => a -> HH.HTML b Action
+render :: forall b. State -> HH.HTML b Action
 render state =
   HH.div_
-    [ HH.button [ HE.onClick \_ -> pure Decrement ] [ HH.text "-" ]
-    , HH.text (show state)
-    , HH.button [ HE.onClick \_ -> pure Increment ] [ HH.text "+" ]
+    [ HH.text "Hello world!"
     ]
 
 handleAction :: forall m output. Action -> H.HalogenM State Action () output m Unit
-handleAction = case _ of
-  Decrement ->
-    H.modify_ \state -> state - 1
+handleAction = const $ pure unit
 
-  Increment ->
-    H.modify_ \state -> state + 1
