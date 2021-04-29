@@ -168,7 +168,7 @@ instance FromJSON ServerMsg
 writeTypes :: IO ()
 writeTypes = 
   do
-    writePSTypes "client/src/Shared.purs" (buildBridge defaultBridge) types
+    writePSTypes "client/src" (buildBridge defaultBridge) types
   where
     types =
       [ mkSumType (Proxy :: Proxy Rank)

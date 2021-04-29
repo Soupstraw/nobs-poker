@@ -60,7 +60,7 @@ data NoBSState = NoBSState
   , _nsLogContext   :: LogContexts
   , _nsLogEnv       :: LogEnv
   }
-makeLenses ' NoBSState
+makeLenses 'NoBSState
 
 newtype NoBS a = NoBS
   { unNoBS :: ReaderT NoBSState (RandT StdGen (KatipContextT Handler)) a
